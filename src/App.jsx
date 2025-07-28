@@ -14,7 +14,8 @@ import AuthForm from "./AuthForm";
 import Dashboard from "./Dashboard";
 import ViewQuote from "./ViewQuote";
 import MyQuotes from "./MyQuotes";
-import EstimateForm from "./EstimateForm.jsx";
+import EstimateForm from "./EstimateForm";
+
 
 import QuoteDetail from "./QuoteDetail";
 import { auth } from "./firebaseConfig";
