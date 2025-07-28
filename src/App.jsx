@@ -11,6 +11,8 @@ import Dashboard from "./Dashboard";
 import ViewQuote from "./ViewQuote";
 import MyQuotes from "./MyQuotes";
 import { auth } from "./firebaseConfig";
+import EstimateForm from "./EstimateForm";
+import QuoteDetail from "./QuoteDetail";
 
 const ADMIN_UID = "REuTGQ98bAM0riY9xidS8fW6obl2"; // 🔁 Replace with your actual UID
 
@@ -29,30 +31,35 @@ const App = () => {
       <ToastContainer position="top-right" autoClose={3000} />
 
       <Routes>
-        <Route
-          path="/"
-          element={
-            !user ? (
-              <AuthForm onAuthSuccess={setUser} />
-            ) : (
-              <Dashboard user={user} setUser={setUser} />
-            )
-          }
-        />
-        <Route path="/view-quote" element={<ViewQuote />} />
-        <Route path="/my-quotes" element={<MyQuotes />} />
+  <Route
+    path="/"
+    element={
+      !user ? (
+        <AuthForm onAuthSuccess={setUser} />
+      ) : (
+        <Dashboard user={user} setUser={setUser} />
+      )
+    }
+  />
+  
+  ✅ <Route path="/dashboard" element={<Dashboard user={user} setUser={setUser} />} />
 
-        <Route
-          path="/admin"
-          element={
-            user?.uid === ADMIN_UID ? (
-              <AdminPanel />
-            ) : (
-              <Navigate to="/" />
-            )
-          }
-        />
-      </Routes>
+  <Route path="/view-quote" element={<ViewQuote />} />
+  <Route path="/my-quotes" element={<MyQuotes />} />
+  <Route path="/estimate" element={<EstimateForm />} />
+  <Route path="/quote/:id" element={<QuoteDetail />} />
+  <Route
+    path="/admin"
+    element={
+      user?.uid === ADMIN_UID ? (
+        <AdminPanel />
+      ) : (
+        <Navigate to="/" />
+      )
+    }
+  />
+</Routes>
+
     </Router>
   );
 };
