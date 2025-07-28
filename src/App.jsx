@@ -42,7 +42,8 @@ const App = () => {
     }
   />
   
-  ✅ <Route path="/dashboard" element={<Dashboard user={user} setUser={setUser} />} />
+ <Route path="/dashboard" element={<Dashboard user={user} setUser={setUser} />} />
+
 
   <Route path="/view-quote" element={<ViewQuote />} />
   <Route path="/my-quotes" element={<MyQuotes />} />
