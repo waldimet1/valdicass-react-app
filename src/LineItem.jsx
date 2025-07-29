@@ -1,9 +1,18 @@
 import React, { useEffect, useState } from "react";
 import usePricing from "./hooks/usePricing";
 import Tooltip from "./Tooltip";
- // make sure path matches
 
-// ... (constants like jambSizes, colors, etc.)
+// ✅ Define missing constants:
+const windowStyles = ["Casement", "Double-Hung", "Sliding", "Hopper", "Fixed", "Awning", "Single-Hung", "Special Shape", "Bay", "Bow"];
+const doorStyles = ["Sliding", "French", "Folding", "Multislide"];
+const installMethods = ["Full-frame", "Pocket"];
+const materials = ["Pella", "ProVia"];
+const pellaSeries = ["Reserve", "Lifestyle"];
+const proviaSeries = ["Aeris", "Endure", "Aspect", "ecoLite"];
+const reserveInteriorColors = ["natural", "black stain", "golden oak", "early american", "provincial", "Dark Mahogany", "Charcoal", "Bright White", "white", "linen white", "primed", "custom color"];
+const reserveExteriorColors = ["black", "white", "classic white", "brown", "fossil", "iron ore", "portobello", "putty", "almond", "brick red", "Hartford Green", "Wolf Gray", "Soft Linen", "Satin Steel", "Matte Gray", "Spice Red", "Sage", "Blue Ash", "Frost Blue"];
+const lifestyleInteriorColors = ["black stain", "golden oak", "early american", "provincial"];
+const lifestyleExteriorColors = ["black", "white", "classic white", "brown", "fossil", "iron ore", "portobello", "putty", "almond", "brick red", "Hartford Green", "Wolf Gray"];
 
 const LineItem = ({ item, index, updateLineItem }) => {
   const { pricingMap, loading, error } = usePricing();
@@ -47,7 +56,7 @@ const LineItem = ({ item, index, updateLineItem }) => {
         <select name="style" value={item.style || ""} onChange={handleChange}
           className={`p-2 border rounded ${showError("style") ? "border-red-500" : "border-gray-300"}`}>
           <option value="">Select Style</option>
-          {(item.type === "Window" ? [...baseStyles, ...windowStyles] : item.type === "Door" ? doorStyles : []).map((s) => (
+          {(item.type === "Window" ? windowStyles : item.type === "Door" ? doorStyles : []).map((s) => (
             <option key={s}>{s}</option>
           ))}
         </select>
@@ -79,9 +88,6 @@ const LineItem = ({ item, index, updateLineItem }) => {
         </select>
       </Tooltip>
 
-      {/* Add more <Tooltip> components similarly around other inputs or dropdowns */}
-
-      {/* Example without tooltip */}
       <input
         type="number"
         name="unitPrice"
@@ -94,4 +100,5 @@ const LineItem = ({ item, index, updateLineItem }) => {
 };
 
 export default LineItem;
+
 
