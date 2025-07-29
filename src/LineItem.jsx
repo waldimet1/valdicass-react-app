@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import usePricing from "./hooks/usePricing";
-import Tooltip from "./components/Tooltip"; // make sure path matches
+import Tooltip from "./Tooltip";
+ // make sure path matches
 
 // ... (constants like jambSizes, colors, etc.)
 
