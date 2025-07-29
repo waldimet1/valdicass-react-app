@@ -1,7 +1,6 @@
-// hooks/usePricing.js
-import { useEffect, useState } from "react";
-import { collection, getDocs } from "firebase/firestore";
-import { db } from "../firebaseConfig";
+import { useEffect, useState } from 'react';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../firebaseConfig';
 
 const usePricing = () => {
   const [pricingMap, setPricingMap] = useState({});
@@ -11,18 +10,15 @@ const usePricing = () => {
   useEffect(() => {
     const fetchPricing = async () => {
       try {
-        const snapshot = await getDocs(collection(db, "pricing"));
-        const map = {};
+        const snapshot = await getDocs(collection(db, 'pricing'));
+        const pricing = {};
         snapshot.forEach((doc) => {
-          const data = doc.data();
-          const key = `${data.type}_${data.style}`; // e.g., "Window_Casement"
-          map[key] = data.unitPrice;
+          pricing[doc.id] = doc.data();
         });
-        setPricingMap(map);
-        setLoading(false);
+        setPricingMap(pricing);
       } catch (err) {
-        console.error("🔥 Error fetching pricing data:", err);
         setError(err);
+      } finally {
         setLoading(false);
       }
     };
@@ -34,6 +30,3 @@ const usePricing = () => {
 };
 
 export default usePricing;
-
-
-

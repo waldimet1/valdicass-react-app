@@ -75,6 +75,27 @@ input, select {
   border-radius: 0.375rem;
   box-sizing: border-box;
 }
+.line-item {
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background-color: #f9f9f9;
+}
+
+.line-item input,
+.line-item select,
+.line-item textarea {
+  margin: 6px 0;
+  padding: 8px;
+  width: 100%;
+  max-width: 300px;
+  box-sizing: border-box;
+}
+
+.line-item select {
+  height: 38px;
+}
 
 button {
   display: block;

@@ -15,7 +15,8 @@ const EstimateForm = () => {
   });
 
   const [rooms, setRooms] = useState([]);
-  const { pricing, loading } = usePricing();
+  const { pricingMap: pricing, loading } = usePricing();
+
 
   const handleClientChange = (e) => {
     const { name, value } = e.target;
@@ -32,33 +33,34 @@ const EstimateForm = () => {
     setRooms(updatedRooms);
   };
 
-  const addLineItemToRoom = (roomIndex) => {
-    const defaultType = "Window";
-    const defaultStyle = "Casement";
-    const basePrice = pricing?.[defaultType]?.[defaultStyle] || 0;
+const addLineItemToRoom = (roomIndex) => {
+  const defaultType = "Window";
+  const defaultStyle = "Casement";
+  const basePrice = pricing?.[defaultType]?.[defaultStyle] || 0;
 
-    const newItem = {
-      location: "",
-      width: "",
-      height: "",
-      type: defaultType,
-      style: defaultStyle,
-      venting: "",
-      material: "",
-      series: "",
-      jambSize: "",
-      colorExt: "",
-      colorInt: "",
-      installMethod: "",
-      quantity: 1,
-      unitPrice: basePrice,
-      notes: "",
-    };
-
-    const updatedRooms = [...rooms];
-    updatedRooms[roomIndex].items.push(newItem);
-    setRooms(updatedRooms);
+  const newItem = {
+    uid: crypto.randomUUID?.() || Date.now().toString(), // Fallback for older browsers
+    location: "",
+    width: "",
+    height: "",
+    type: defaultType,
+    style: defaultStyle,
+    venting: "",
+    material: "",
+    series: "",
+    colorExt: "",
+    colorInt: "",
+    installMethod: "",
+    quantity: 1,
+    unitPrice: basePrice,
+    notes: "",
   };
+
+  const updatedRooms = [...rooms];
+  updatedRooms[roomIndex].items.push(newItem);
+  setRooms(updatedRooms);
+};
+
 
   const updateLineItem = (roomIndex, itemIndex, updatedItem) => {
     const basePrice =
@@ -144,22 +146,34 @@ const EstimateForm = () => {
 
         {/* 🏠 Rooms */}
         {rooms.map((room, roomIndex) => (
-          <div key={roomIndex}>
+  <div
+    key={roomIndex}
+    style={{
+      marginTop: "2rem",
+      padding: "1rem",
+      borderTop: "2px solid #ccc",
+      borderBottom: "2px solid #ccc",
+      backgroundColor: "#f5f5f5",
+      borderRadius: "6px",
+    }}
+  >
+
             <input
               placeholder="Room Name (e.g., Kitchen)"
               value={room.name}
               onChange={(e) => updateRoomName(roomIndex, e.target.value)}
             />
             {room.items.map((item, itemIndex) => (
-              <LineItem
-                key={itemIndex}
-                item={item}
-                index={itemIndex}
-                updateLineItem={(index, updatedItem) =>
-                  updateLineItem(roomIndex, index, updatedItem)
-                }
-              />
-            ))}
+  <LineItem
+    key={item.uid} // ✅ Unique key
+    item={item}
+    index={itemIndex}
+    updateLineItem={(index, updatedItem) =>
+      updateLineItem(roomIndex, index, updatedItem)
+    }
+  />
+))}
+
             <button onClick={() => addLineItemToRoom(roomIndex)}>
               + Add Item to {room.name || "Room"}
             </button>
