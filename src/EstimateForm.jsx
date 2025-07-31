@@ -8,6 +8,7 @@ import greenskyLogo from "./assets/greensky-logo.jpeg";
 import "./EstimateForm.css";
 import usePricing from "./hooks/usePricing";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
+import { useNavigate } from "react-router-dom";
 
 const EstimateForm = () => {
   const [client, setClient] = useState({ name: "", address: "", clientEmail: "" });
@@ -17,6 +18,12 @@ const EstimateForm = () => {
   const [total, setTotal] = useState(0);
   const [isCheckout, setIsCheckout] = useState(false);
   const { pricingMap: pricing } = usePricing();
+  const navigate = useNavigate();
+
+  // ⬆️ Scroll to top when component mounts
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
 
   const getPrice = (pricingMap, item) => {
     return (
@@ -152,6 +159,8 @@ const EstimateForm = () => {
       };
       await addDoc(collection(db, "quotes"), quote);
       alert("✅ Quote saved!");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      navigate("/dashboard"); // ✅ redirect after save
     } catch (error) {
       console.error("🔥 Save error:", error);
       alert(`❌ Error: ${error.message}`);
@@ -178,21 +187,14 @@ const EstimateForm = () => {
               onChange={(e) => updateRoomName(roomIndex, e.target.value)}
               className="mb-2"
             />
-
             <div className="text-sm text-gray-400 mb-2">↕️ Drag to reorder</div>
 
-            <DragDropContext
-              onDragEnd={(result) => handleDragEnd(result, roomIndex)}
-            >
+            <DragDropContext onDragEnd={(result) => handleDragEnd(result, roomIndex)}>
               <Droppable droppableId={`room-${roomIndex}`}>
                 {(provided) => (
                   <div ref={provided.innerRef} {...provided.droppableProps}>
                     {room.items.map((item, itemIndex) => (
-                      <Draggable
-                        key={item.uid}
-                        draggableId={item.uid}
-                        index={itemIndex}
-                      >
+                      <Draggable key={item.uid} draggableId={item.uid} index={itemIndex}>
                         {(provided) => (
                           <div
                             ref={provided.innerRef}
