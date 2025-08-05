@@ -43,7 +43,8 @@ const SalesDashboardLiveTest = ({ user, setUser }) => {
   return (
     <div style={styles.container}>
       <div style={styles.header}>
-        <img src="/valdicass-logo.png" alt="Valdicass Logo" style={{ height: 40 }} />
+       <img src="/valdicass-logo.png" alt="Valdicass Logo" style={{ height: 40 }} />
+
         <h2>Valdicass Quoting</h2>
         <button onClick={handleLogout} style={styles.logoutBtn}>Logout</button>
       </div>
