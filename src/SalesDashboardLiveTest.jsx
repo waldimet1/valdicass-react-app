@@ -156,7 +156,7 @@ const styles = {
     margin: "0 auto",
   },
   header: {
-    backgroundColor: "#004a99",
+    backgroundColor: "#2C84E0",
     color: "white",
     padding: "1rem",
     borderRadius: "10px",
