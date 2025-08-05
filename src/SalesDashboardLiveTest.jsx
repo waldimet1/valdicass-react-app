@@ -1,206 +1,205 @@
-import React, { useEffect, useState, useRef, useLayoutEffect } from "react";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
-import { onAuthStateChanged } from "firebase/auth";
-import { useNavigate } from "react-router-dom";
-import { toast, ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import React, { useEffect, useState } from "react";
+import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
 import { auth, db } from "./firebaseConfig";
-import "./SalesDashboard.css";
-import Header from "./components/Header";
-import { deleteDoc, doc } from "firebase/firestore";
+import { signOut } from "firebase/auth";
+import { useNavigate } from "react-router-dom";
 
-const formatMonthYear = (timestamp) => {
-  if (!timestamp) return "Unknown";
-  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-  return date.toLocaleDateString("en-US", { year: "numeric", month: "long" });
-};
-
-const SalesDashboardLiveTest = () => {
+const SalesDashboardLiveTest = ({ user, setUser }) => {
   const [quotes, setQuotes] = useState([]);
-  const [user, setUser] = useState(null);
-  const [activeTab, setActiveTab] = useState("All");
-
-  const headerRef = useRef(null);
-  const mainRef = useRef(null);
-
+  const [activeFilter, setActiveFilter] = useState("All");
   const navigate = useNavigate();
 
-  useLayoutEffect(() => {
-    if (headerRef.current && mainRef.current) {
-      const headerHeight = headerRef.current.offsetHeight;
-      mainRef.current.style.paddingTop = `${headerHeight}px`;
-    }
-  }, []);
-
   useEffect(() => {
-    let unsubscribeQuotes;
-
-    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
-
-        const q = query(collection(db, "quotes"), where("userId", "==", currentUser.uid));
-        unsubscribeQuotes = onSnapshot(q, (snapshot) => {
-          const quoteData = snapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          }));
-          setQuotes(quoteData);
-        });
-      } else {
-        setUser(null);
-      }
-    });
-
-    return () => {
-      if (unsubscribeQuotes) unsubscribeQuotes();
-      unsubscribeAuth();
+    const fetchQuotes = async () => {
+      const q = query(
+        collection(db, "quotes"),
+        where("createdBy", "==", user.uid),
+        orderBy("createdAt", "desc")
+      );
+      const snapshot = await getDocs(q);
+      const fetchedQuotes = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setQuotes(fetchedQuotes);
     };
-  }, []);
+    fetchQuotes();
+  }, [user]);
 
-  const handleView = (quoteId) => navigate(`/view?id=${quoteId}`);
-  const handleEdit = (quoteId) => navigate(`/edit?id=${quoteId}`);
-const handleDelete = async (quoteId) => {
-  const confirmed = window.confirm("⚠️ Are you sure you want to delete this quote? This cannot be undone.");
-  if (!confirmed) return;
-
-  try {
-    await deleteDoc(doc(db, "quotes", quoteId));
-    toast.success("🗑️ Quote deleted successfully!");
-  } catch (err) {
-    console.error("❌ Error deleting quote:", err);
-    toast.error("Failed to delete quote.");
-  }
-};
-
-  const handleDownload = async (quoteId) => {
-    try {
-      const url = `https://valdicass-server.vercel.app/downloadQuotePdf?quoteId=${quoteId}`;
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `quote-${quoteId}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch (err) {
-      console.error("❌ Error downloading PDF:", err);
-      toast.error("❌ Failed to download quote PDF.");
-    }
+  const handleLogout = () => {
+    signOut(auth).then(() => {
+      setUser(null);
+      navigate("/");
+    });
   };
 
-  const handleResend = async (quote) => {
-    if (!quote.client?.email) {
-      toast.error("❌ This quote has no client email on file.");
-      return;
-    }
-    try {
-      const res = await fetch("https://valdicass-server.vercel.app/sendQuoteEmail", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          quoteId: quote.id,
-          clientEmail: quote.client.email,
-        }),
-      });
-      const result = await res.json();
-      if (res.ok) {
-        toast.success("✅ Quote re-sent!", { autoClose: 3000 });
-      } else {
-        toast.error("❌ Failed to resend quote: " + result.error);
-      }
-    } catch (err) {
-      console.error("❌ Error resending quote:", err);
-      toast.error("❌ Failed to resend quote.");
-    }
-  };
-const [activeFilter, setActiveFilter] = useState("All");
-const filters = ["All", "Sent", "Viewed", "Signed", "Declined"];
+  const filters = ["All", "Sent", "Viewed", "Signed", "Declined"];
 
-<div className="filter-buttons">
-  {filters.map((filter) => (
-    <button
-      key={filter}
-      onClick={() => setActiveFilter(filter)}
-      className={`filter-button ${activeFilter === filter ? "active" : ""}`}
-    >
-      {filter}
-    </button>
-  ))}
-</div>
-
-  const filteredQuotes = quotes.filter((q) => {
-    if (activeTab === "All") return true;
-    if (activeTab === "Sent") return !q.viewed && !q.signed && !q.declined;
-    if (activeTab === "Viewed") return q.viewed && !q.signed && !q.declined;
-    if (activeTab === "Signed") return q.signed;
-    if (activeTab === "Declined") return q.declined;
-    
-    return true;
+  const filteredQuotes = quotes.filter((quote) => {
+    if (activeFilter === "All") return true;
+    return quote.status?.toLowerCase() === activeFilter.toLowerCase();
   });
 
   return (
-    <>
-      <div ref={headerRef}>
-        <Header />
+    <div style={styles.container}>
+      <div style={styles.header}>
+        <img src="/logo192.png" alt="Valdicass Logo" style={{ height: 40 }} />
+        <h2>Valdicass Quoting</h2>
+        <button onClick={handleLogout} style={styles.logoutBtn}>Logout</button>
       </div>
 
-      <main ref={mainRef} className="dashboard-container">
-        
+      <div style={styles.filterBar}>
+        {filters.map((filter) => (
+          <button
+            key={filter}
+            onClick={() => setActiveFilter(filter)}
+            className={`filter-pill ${activeFilter === filter ? "active" : ""}`}
+          >
+            {filter}
+          </button>
+        ))}
+      </div>
 
-        <div className="tab-row">
-          {["All", "Sent", "Viewed", "Signed", "Declined"].map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`tab-button ${activeTab === tab ? "active" : ""}`}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-
-        <div className="quote-grid">
-          {filteredQuotes.map((q) => (
-            <div key={q.id} className="quote-card-modern">
-              <div className="quote-card-header">
-                <div>
-                  <h2 className="client-name">{q.client?.name || "Unnamed Client"}</h2>
-                  <p className="quote-meta">{q.location || "No location"}</p>
-                </div>
-                <div className={`status-tag ${q.signed ? 'signed' : q.declined ? 'declined' : q.viewed ? 'viewed' : 'sent'}`}>
-                  {q.declined
-                    ? "Declined"
-                    : q.signed
-                    ? "Signed"
-                    : q.viewed
-                    ? "Viewed"
-                    : "Sent"}
-                </div>
-              </div>
-
-              <div className="quote-card-body">
-                <div className="total-display">
-                  <strong>Total:</strong> ${q.total?.toLocaleString() || "N/A"}
-                </div>
-                <div className="button-group">
-                  <button onClick={() => handleView(q.id)} className="btn btn-view">View</button>
-                  <button onClick={() => handleResend(q)} className="btn btn-resend">Resend</button>
-                  <button onClick={() => handleEdit(q.id)} className="btn btn-edit">✏️ Edit</button>
-                  <button onClick={() => handleDelete(q.id)} className="btn btn-delete">Delete</button>
-
-                  <button onClick={() => handleDownload(q.id)} className="btn btn-download">Download</button>
-                </div>
-              </div>
+      <div>
+        {filteredQuotes.map((quote) => (
+          <div key={quote.id} style={styles.card}>
+            <div style={styles.cardHeader}>
+              <h3>{quote.clientName || "Unnamed Client"}</h3>
+              <span className={`status-tag ${quote.status?.toLowerCase() || ""}`}>
+                {quote.status?.toUpperCase() || "UNKNOWN"}
+              </span>
             </div>
-          ))}
-        </div>
+            <p style={{ margin: "4px 0" }}>
+              <strong>Location:</strong> {quote.location || "No location"}
+            </p>
+            <p style={{ margin: "4px 0" }}>
+              <strong>Total:</strong> ${quote.total || 0}
+            </p>
+            <div style={styles.actions}>
+              <button className="btn view" onClick={() => navigate(`/view-quote?id=${quote.id}`)}>View</button>
+              <button className="btn resend">Resend</button>
+              <button className="btn edit" onClick={() => navigate(`/edit?id=${quote.id}`)}>✏️ Edit</button>
+              <button className="btn delete">Delete</button>
+              <button className="btn download">Download</button>
+            </div>
+          </div>
+        ))}
+      </div>
 
-        <ToastContainer />
-      </main>
-    </>
+      {/* CSS injection */}
+      <style>{`
+        .filter-pill {
+          background: white;
+          color: #004a99;
+          border: 1px solid #004a99;
+          padding: 6px 14px;
+          font-size: 14px;
+          border-radius: 999px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          margin: 4px;
+        }
+        .filter-pill:hover {
+          background: #004a99;
+          color: white;
+        }
+        .filter-pill.active {
+          background: #004a99;
+          color: white;
+          font-weight: bold;
+        }
+        .status-tag {
+          font-size: 12px;
+          padding: 4px 8px;
+          border-radius: 8px;
+          text-transform: uppercase;
+        }
+        .status-tag.sent {
+          background-color: #d0e7ff;
+          color: #004a99;
+        }
+        .status-tag.viewed {
+          background-color: #fff3cd;
+          color: #856404;
+        }
+        .status-tag.signed {
+          background-color: #d4edda;
+          color: #155724;
+        }
+        .status-tag.declined {
+          background-color: #f8d7da;
+          color: #721c24;
+        }
+        .btn {
+          margin: 6px;
+          padding: 8px 12px;
+          border-radius: 8px;
+          border: none;
+          font-weight: 500;
+          cursor: pointer;
+        }
+        .btn.view { background: #004a99; color: white; }
+        .btn.resend { background: gray; color: white; }
+        .btn.edit { background: #ffcc00; color: black; }
+        .btn.delete { background: #dc3545; color: white; }
+        .btn.download { background: #333; color: white; }
+      `}</style>
+    </div>
   );
 };
 
+const styles = {
+  container: {
+    padding: "1rem",
+    maxWidth: "900px",
+    margin: "0 auto",
+  },
+  header: {
+    backgroundColor: "#004a99",
+    color: "white",
+    padding: "1rem",
+    borderRadius: "10px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    marginBottom: "1rem",
+  },
+  logoutBtn: {
+    backgroundColor: "#dc3545",
+    color: "white",
+    border: "none",
+    borderRadius: "6px",
+    padding: "8px 14px",
+    cursor: "pointer",
+  },
+  filterBar: {
+    display: "flex",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    marginBottom: "1rem",
+  },
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: "16px",
+    boxShadow: "0 4px 10px rgba(0,0,0,0.05)",
+    padding: "1.5rem",
+    margin: "1rem 0",
+  },
+  cardHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: "0.5rem",
+  },
+  actions: {
+    marginTop: "1rem",
+    display: "flex",
+    flexWrap: "wrap",
+  },
+};
+
 export default SalesDashboardLiveTest;
+
 
 
