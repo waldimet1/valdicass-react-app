@@ -156,7 +156,7 @@ const styles = {
     margin: "0 auto",
   },
   header: {
-    backgroundColor: "#2C84E0",
+    backgroundColor: "#2c84e0ff",
     color: "white",
     padding: "1rem",
     borderRadius: "10px",
@@ -167,7 +167,7 @@ const styles = {
     marginBottom: "1rem",
   },
   logoutBtn: {
-    backgroundColor: "#dc3545",
+    backgroundColor: "#000000",
     color: "white",
     border: "none",
     borderRadius: "6px",
