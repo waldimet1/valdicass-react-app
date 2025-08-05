@@ -4,65 +4,65 @@ import { onAuthStateChanged } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-
 import { auth, db } from "./firebaseConfig";
+import "./SalesDashboard.css";
+console.log("✅ SalesDashboard rendered");
+console.log("📦 JSX update test: SalesDashboard.jsx loaded");
 
-const SalesDashboard = () => {
+const SalesDashboardLiveTest = () => {
   const [quotes, setQuotes] = useState([]);
   const [user, setUser] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
+    let unsubscribeQuotes;
+
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
+       const q = query(collection(db, "quotes"), where("userId", "==", currentUser.uid));
 
-        const q = query(
-          collection(db, "quotes"),
-          where("createdBy", "==", currentUser.uid)
-        );
-
-        const unsubscribeQuotes = onSnapshot(q, (snapshot) => {
+        unsubscribeQuotes = onSnapshot(q, (snapshot) => {
           const quoteData = snapshot.docs.map((doc) => ({
             id: doc.id,
             ...doc.data(),
           }));
           setQuotes(quoteData);
         });
-
-        return () => unsubscribeQuotes();
       } else {
         setUser(null);
       }
     });
 
-    return () => unsubscribeAuth();
+    return () => {
+      if (unsubscribeQuotes) unsubscribeQuotes();
+      unsubscribeAuth();
+    };
   }, []);
 
-  const handleView = (quoteId) => {
-    navigate(`/view?id=${quoteId}`);
+  const handleView = (quoteId) => navigate(`/view?id=${quoteId}`);
+  const handleEdit = (quoteId) => navigate(`/edit?id=${quoteId}`);
+
+  const handleDownload = async (quoteId) => {
+    try {
+      const url = `https://valdicass-server.vercel.app/downloadQuotePdf?quoteId=${quoteId}`;
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `quote-${quoteId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error("❌ Error downloading PDF:", err);
+      toast.error("❌ Failed to download quote PDF.");
+    }
   };
-const handleDownload = async (quoteId) => {
-  try {
-    const url = `https://valdicass-server.vercel.app/downloadQuotePdf?quoteId=${quoteId}`;
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `quote-${quoteId}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  } catch (err) {
-    console.error("❌ Error downloading PDF:", err);
-    toast.error("❌ Failed to download quote PDF.");
-  }
-};
 
   const handleResend = async (quote) => {
     if (!quote.client?.email) {
       toast.error("❌ This quote has no client email on file.");
       return;
     }
-
     try {
       const res = await fetch("https://valdicass-server.vercel.app/sendQuoteEmail", {
         method: "POST",
@@ -72,9 +72,7 @@ const handleDownload = async (quoteId) => {
           clientEmail: quote.client.email,
         }),
       });
-
       const result = await res.json();
-
       if (res.ok) {
         toast.success("✅ Quote re-sent!", { autoClose: 3000 });
       } else {
@@ -85,81 +83,60 @@ const handleDownload = async (quoteId) => {
       toast.error("❌ Failed to resend quote.");
     }
   };
-const handleEdit = (quoteId) => {
-  navigate(`/edit?id=${quoteId}`);
-};
 
   return (
-    <div style={{ padding: "2rem", fontFamily: "sans-serif", maxWidth: "1000px", margin: "0 auto" }}>
-      <h1 style={{ color: "#004a99", marginBottom: "1rem" }}>📊 My Sent Quotes</h1>
-
-      {quotes.length === 0 ? (
-        <p>No quotes found.</p>
-      ) : (
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.95rem" }}>
-          <thead>
-            <tr style={{ backgroundColor: "#eaf2fb", textAlign: "left" }}>
-              <th style={{ padding: "0.75rem" }}>Client</th>
-              <th>Total</th>
-              <th>Status</th>
-              <th>Location</th>
-              <th>Material</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {quotes.map((q) => (
-              <tr key={q.id} style={{ borderBottom: "1px solid #ddd" }}>
-                <td style={{ padding: "0.75rem" }}>{q.client?.name || "N/A"}</td>
-                <td>${q.total || "N/A"}</td>
-                <td>
-                  {q.declined
-                    ? "❌ Declined"
-                    : q.signed
-                    ? "✅ Signed"
-                    : q.viewed
-                    ? "👁 Viewed"
-                    : "📤 Sent"}
-                </td>
-                <td>{q.location || "–"}</td>
-                <td>{`${q.material || ""} ${q.series || ""} ${q.style || ""}`}</td>
-                <td>
-  <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-    <button onClick={() => handleView(q.id)} style={btnStyle}>View</button>
-    <button onClick={() => handleResend(q)} style={{ ...btnStyle, backgroundColor: "#888" }}>
-      Resend
-    </button>
-    <button onClick={() => navigate(`/edit?id=${q.id}`)} style={{ ...btnStyle, backgroundColor: "#f4a300" }}>
-  ✏️ Edit
-</button>
+    <div className="dashboard-container">
+ <h1 className="dashboard-title">🚨 JSX UPDATE TEST WORKING</h1>
 
 
-    <button onClick={() => handleDownload(q.id)} style={{ ...btnStyle, backgroundColor: "#555" }}>
-      Download PDF
-    </button>
-  </div>
-</td>
+  {quotes.length === 0 ? (
+    <p>No quotes found.</p>
+  ) : (
+    <div className="quote-grid">
+      {quotes.map((q) => (
+        <div key={q.id} className="quote-card-modern">
+          <div className="quote-card-header">
+            <div>
+              <h2 className="client-name">{q.client?.name || "Unnamed Client"}</h2>
+              <p className="quote-meta">
+                {q.location || "No location"}<br />
+                {`${q.material || ""} ${q.series || ""} ${q.style || ""}`}
+              </p>
+            </div>
+            <div className={`status-tag ${q.signed ? 'signed' : q.declined ? 'declined' : q.viewed ? 'viewed' : 'sent'}`}>
+              {q.declined
+                ? "Declined"
+                : q.signed
+                ? "Signed"
+                : q.viewed
+                ? "Viewed"
+                : "Sent"}
+            </div>
+          </div>
 
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-
-      <ToastContainer />
+          <div className="quote-card-body">
+            <div className="total-display">
+              <strong>Total:</strong> ${q.total?.toLocaleString() || "N/A"}
+            </div>
+            <div className="button-group">
+              <button onClick={() => handleView(q.id)} className="btn btn-view">View</button>
+              <button onClick={() => handleResend(q)} className="btn btn-resend">Resend</button>
+              <button onClick={() => handleEdit(q.id)} className="btn btn-edit">✏️ Edit</button>
+              <button onClick={() => handleDownload(q.id)} className="btn btn-download">Download</button>
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
+  )}
+
+  <ToastContainer />
+</div>
+
   );
 };
 
-const btnStyle = {
-  backgroundColor: "#004a99",
-  color: "white",
-  padding: "0.4rem 0.8rem",
-  border: "none",
-  borderRadius: "4px",
-  cursor: "pointer",
-  fontSize: "0.85rem",
-};
+export default SalesDashboardLiveTest;
 
-export default SalesDashboard;
+
 

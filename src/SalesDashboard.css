@@ -1,0 +1,151 @@
+/* src/SalesDashboard.css */
+.dashboard-container {
+  display: block; /* Or: flex with column direction */
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 2rem;
+  padding-top: 220px;
+  margin: 0 auto;
+}
+
+.quote-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.quote-card-modern {
+  background-color: #fffbea;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  padding: 1.25rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s ease;
+}
+
+.quote-card-modern:hover {
+  transform: scale(1.01);
+}
+
+.quote-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.client-name {
+  font-size: 1.2rem;
+  font-weight: bold;
+  margin: 0;
+}
+
+.quote-meta {
+  color: #555;
+  font-size: 0.9rem;
+}
+
+.status-tag {
+  font-size: 0.75rem;
+  font-weight: bold;
+  padding: 4px 8px;
+  border-radius: 5px;
+  text-transform: uppercase;
+  background-color: #ccc;
+  color: #fff;
+}
+
+.status-tag.sent {
+  background-color: #004a99;
+}
+.status-tag.viewed {
+  background-color: #008cba;
+}
+.status-tag.signed {
+  background-color: #4caf50;
+}
+.status-tag.declined {
+  background-color: #e53935;
+}
+
+.quote-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.total-display {
+  font-size: 1.1rem;
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+}
+
+.button-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.btn {
+  padding: 0.6rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.btn-view {
+  background-color: #004a99;
+  color: white;
+}
+
+.btn-resend {
+  background-color: #63666a;
+  color: white;
+}
+body, html, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  display: block; /* NOT flex or grid here */
+}
+
+
+.btn-edit {
+  background-color: #ffce00;
+  color: #000;
+}
+.btn-delete {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn-delete:hover {
+  background-color: #c82333;
+}
+
+.btn-download {
+  background-color: #3e3e3e;
+  color: white;
+}
+
+@media screen and (min-width: 640px) {
+  .button-group {
+    flex-direction: row;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    flex: 1;
+    min-width: 120px;
+  }
+}
+
+

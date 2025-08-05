@@ -11,25 +11,24 @@ import "react-toastify/dist/ReactToastify.css";
 
 import AdminPanel from "./AdminPanel";
 import AuthForm from "./AuthForm";
-import Dashboard from "./Dashboard";
+import SalesDashboardLiveTest from "./SalesDashboardLiveTest";
+
 import ViewQuote from "./ViewQuote";
 import MyQuotes from "./MyQuotes";
 import EstimateForm from "./EstimateForm";
-
-
 import QuoteDetail from "./QuoteDetail";
 import { auth } from "./firebaseConfig";
 
-const ADMIN_UID = "REuTGQ98bAM0riY9xidS8fW6obl2"; // ✅ replace with your actual UID
+const ADMIN_UID = "REuTGQ98bAM0riY9xidS8fW6obl2";
 
 const App = () => {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true); // ✅ loading state
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
-      setLoading(false); // ✅ stop loading after auth resolves
+      setLoading(false);
     });
     return () => unsubscribe();
   }, []);
@@ -42,23 +41,19 @@ const App = () => {
     <Router>
       <ToastContainer position="top-right" autoClose={3000} />
       <Routes>
-        {/* Root route */}
         <Route
           path="/"
           element={
             user ? <Navigate to="/dashboard" /> : <AuthForm onAuthSuccess={setUser} />
           }
         />
+       <Route
+  path="/dashboard"
+  element={
+    user ? <SalesDashboardLiveTest user={user} setUser={setUser} /> : <Navigate to="/" />
+  }
+/>
 
-        {/* Dashboard route */}
-        <Route
-          path="/dashboard"
-          element={
-            user ? <Dashboard user={user} setUser={setUser} /> : <Navigate to="/" />
-          }
-        />
-
-        {/* Other routes */}
         <Route path="/view-quote" element={<ViewQuote />} />
         <Route path="/my-quotes" element={<MyQuotes />} />
         <Route path="/estimate" element={<EstimateForm />} />
@@ -75,6 +70,10 @@ const App = () => {
 };
 
 export default App;
+
+
+
+
 
 
 
