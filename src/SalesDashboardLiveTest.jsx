@@ -43,12 +43,31 @@ const SalesDashboardLiveTest = ({ user, setUser }) => {
   return (
     <div style={styles.container}>
       <div style={styles.header}>
-       <img src="/valdicass-logo.png" alt="Valdicass Logo" style={{ height: 40 }} />
-
+        <img src="/valdicass-logo.png" alt="Valdicass Logo" style={{ height: 40 }} />
         <h2>Valdicass Quoting</h2>
         <button onClick={handleLogout} style={styles.logoutBtn}>Logout</button>
       </div>
 
+      {/* New Quote Button */}
+      <div style={{ textAlign: "center", marginBottom: "1rem" }}>
+        <button
+          onClick={() => navigate("/estimate")}
+          style={{
+            backgroundColor: "#2C84E0",
+            color: "white",
+            fontWeight: "bold",
+            fontSize: "15px",
+            padding: "10px 20px",
+            borderRadius: "10px",
+            border: "none",
+            cursor: "pointer",
+          }}
+        >
+          ➕ New Quote
+        </button>
+      </div>
+
+      {/* Filter Buttons */}
       <div style={styles.filterBar}>
         {filters.map((filter) => (
           <button
@@ -61,6 +80,7 @@ const SalesDashboardLiveTest = ({ user, setUser }) => {
         ))}
       </div>
 
+      {/* Quote Cards */}
       <div>
         {filteredQuotes.map((quote) => (
           <div key={quote.id} style={styles.card}>
@@ -77,11 +97,45 @@ const SalesDashboardLiveTest = ({ user, setUser }) => {
               <strong>Total:</strong> ${quote.total || 0}
             </p>
             <div style={styles.actions}>
-              <button className="btn view" onClick={() => navigate(`/view-quote?id=${quote.id}`)}>View</button>
-              <button className="btn resend">Resend</button>
-              <button className="btn edit" onClick={() => navigate(`/edit?id=${quote.id}`)}>✏️ Edit</button>
-              <button className="btn delete">Delete</button>
-              <button className="btn download">Download</button>
+              <button
+                className="btn view"
+                title="View full quote preview"
+                onClick={() => navigate(`/view-quote?id=${quote.id}`)}
+              >
+                👁️ View Quote
+              </button>
+
+              <button
+                className="btn resend"
+                title="Send this quote again to the client"
+                onClick={() => {/* TODO: Resend logic */}}
+              >
+                🔁 Resend to Client
+              </button>
+
+              <button
+                className="btn edit"
+                title="Edit this quote"
+                onClick={() => navigate(`/edit?id=${quote.id}`)}
+              >
+                ✏️ Edit Quote
+              </button>
+
+              <button
+                className="btn delete"
+                title="Move this quote to trash"
+                onClick={() => {/* TODO: Soft delete logic */}}
+              >
+                🗑️ Move to Trash
+              </button>
+
+              <button
+                className="btn download"
+                title="Download quote as PDF"
+                onClick={() => {/* TODO: Download logic */}}
+              >
+                ⬇️ Download PDF
+              </button>
             </div>
           </div>
         ))}
@@ -133,11 +187,14 @@ const SalesDashboardLiveTest = ({ user, setUser }) => {
         }
         .btn {
           margin: 6px;
-          padding: 8px 12px;
+          padding: 10px 14px;
           border-radius: 8px;
           border: none;
           font-weight: 500;
           cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
         }
         .btn.view { background: #004a99; color: white; }
         .btn.resend { background: gray; color: white; }
@@ -156,7 +213,7 @@ const styles = {
     margin: "0 auto",
   },
   header: {
-    backgroundColor: "#2c84e0ff",
+    backgroundColor: "#2c84e0",
     color: "white",
     padding: "1rem",
     borderRadius: "10px",
