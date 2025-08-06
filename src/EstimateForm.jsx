@@ -193,29 +193,44 @@ const EstimateForm = () => {
               <Droppable droppableId={`room-${roomIndex}`}>
                 {(provided) => (
                   <div ref={provided.innerRef} {...provided.droppableProps}>
-                    {room.items.map((item, itemIndex) => (
-                      <Draggable key={item.uid} draggableId={item.uid} index={itemIndex}>
-                        {(provided) => (
-                          <div
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            {...provided.dragHandleProps}
-                          >
-                            <LineItem
-                              item={item}
-                              index={itemIndex}
-                              pricing={pricing}
-                              updateLineItem={(index, updatedItem) =>
-                                updateLineItem(roomIndex, index, updatedItem)
-                              }
-                              removeLineItem={() =>
-                                removeLineItem(roomIndex, itemIndex)
-                              }
-                            />
-                          </div>
-                        )}
-                      </Draggable>
-                    ))}
+                   {room.items.map((item, itemIndex) => {
+  const itemRef = React.useRef();
+
+  // Scroll into view only for the last item added
+  useEffect(() => {
+    if (itemIndex === room.items.length - 1) {
+      itemRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [room.items.length]);
+
+  return (
+    <Draggable key={item.uid} draggableId={item.uid} index={itemIndex}>
+      {(provided) => (
+        <div
+          ref={(el) => {
+            provided.innerRef(el);
+            itemRef.current = el;
+          }}
+          {...provided.draggableProps}
+          {...provided.dragHandleProps}
+        >
+          <LineItem
+            item={item}
+            index={itemIndex}
+            pricing={pricing}
+            updateLineItem={(index, updatedItem) =>
+              updateLineItem(roomIndex, index, updatedItem)
+            }
+            removeLineItem={() =>
+              removeLineItem(roomIndex, itemIndex)
+            }
+          />
+        </div>
+      )}
+    </Draggable>
+  );
+})}
+
                     {provided.placeholder}
                   </div>
                 )}
