@@ -194,12 +194,24 @@ const EstimateForm = () => {
                 {(provided) => (
                   <div ref={provided.innerRef} {...provided.droppableProps}>
                    {room.items.map((item, itemIndex) => {
-  const itemRef = React.useRef();
+  const itemRefs = useRef([]);
 
-  // Scroll into view only for the last item added
+  // Ensure the array is large enough
+  useEffect(() => {
+    if (itemRefs.current.length < room.items.length) {
+      itemRefs.current = Array(room.items.length)
+        .fill()
+        .map((_, i) => itemRefs.current[i] || React.createRef());
+    }
+  }, [room.items.length]);
+
+  // Scroll into view when last item is added
   useEffect(() => {
     if (itemIndex === room.items.length - 1) {
-      itemRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      itemRefs.current[itemIndex]?.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
     }
   }, [room.items.length]);
 
@@ -208,8 +220,8 @@ const EstimateForm = () => {
       {(provided) => (
         <div
           ref={(el) => {
+            itemRefs.current[itemIndex].current = el;
             provided.innerRef(el);
-            itemRef.current = el;
           }}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
@@ -230,6 +242,7 @@ const EstimateForm = () => {
     </Draggable>
   );
 })}
+
 
                     {provided.placeholder}
                   </div>
