@@ -1,6 +1,4 @@
-// EstimateForm.jsx
 import React, { useState, useEffect, useRef } from "react";
-
 import { collection, addDoc, Timestamp } from "firebase/firestore";
 import { db, auth } from "./firebaseConfig";
 import LineItem from "./LineItem";
@@ -21,7 +19,6 @@ const EstimateForm = () => {
   const { pricingMap: pricing } = usePricing();
   const navigate = useNavigate();
 
-  // ⬆️ Scroll to top when component mounts
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
@@ -161,7 +158,7 @@ const EstimateForm = () => {
       await addDoc(collection(db, "quotes"), quote);
       alert("✅ Quote saved!");
       window.scrollTo({ top: 0, behavior: "smooth" });
-      navigate("/dashboard"); // ✅ redirect after save
+      navigate("/dashboard");
     } catch (error) {
       console.error("🔥 Save error:", error);
       alert(`❌ Error: ${error.message}`);
@@ -180,90 +177,77 @@ const EstimateForm = () => {
         <input name="clientEmail" value={client.clientEmail} onChange={handleClientChange} placeholder="Client Email" type="email" />
 
         {/* Rooms */}
-        {rooms.map((room, roomIndex) => (
-          <div key={roomIndex} className="mt-6 p-4 bg-gray-50 rounded border">
-            <input
-              placeholder="Room Name (e.g., Kitchen)"
-              value={room.name}
-              onChange={(e) => updateRoomName(roomIndex, e.target.value)}
-              className="mb-2"
-            />
-            <div className="text-sm text-gray-400 mb-2">↕️ Drag to reorder</div>
+        {rooms.map((room, roomIndex) => {
+          const itemRefs = useRef([]);
 
-            <DragDropContext onDragEnd={(result) => handleDragEnd(result, roomIndex)}>
-              <Droppable droppableId={`room-${roomIndex}`}>
-                {(provided) => (
-                  <div ref={provided.innerRef} {...provided.droppableProps}>
-                   {room.items.map((item, itemIndex) => {
-  const itemRefs = useRef([]);
+          useEffect(() => {
+            itemRefs.current = itemRefs.current.slice(0, room.items.length);
+          }, [room.items.length]);
 
-  // Ensure the array is large enough
-  useEffect(() => {
-    if (itemRefs.current.length < room.items.length) {
-      itemRefs.current = Array(room.items.length)
-        .fill()
-        .map((_, i) => itemRefs.current[i] || React.createRef());
-    }
-  }, [room.items.length]);
-
-  // Scroll into view when last item is added
-  useEffect(() => {
-    if (itemIndex === room.items.length - 1) {
-      itemRefs.current[itemIndex]?.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }
-  }, [room.items.length]);
-
-  return (
-    <Draggable key={item.uid} draggableId={item.uid} index={itemIndex}>
-      {(provided) => (
-        <div
-          ref={(el) => {
-            itemRefs.current[itemIndex].current = el;
-            provided.innerRef(el);
-          }}
-          {...provided.draggableProps}
-          {...provided.dragHandleProps}
-        >
-          <LineItem
-            item={item}
-            index={itemIndex}
-            pricing={pricing}
-            updateLineItem={(index, updatedItem) =>
-              updateLineItem(roomIndex, index, updatedItem)
+          useEffect(() => {
+            if (room.items.length > 0) {
+              const lastIndex = room.items.length - 1;
+              itemRefs.current[lastIndex]?.scrollIntoView({ behavior: "smooth", block: "start" });
             }
-            removeLineItem={() =>
-              removeLineItem(roomIndex, itemIndex)
-            }
-          />
-        </div>
-      )}
-    </Draggable>
-  );
-})}
+          }, [room.items.length]);
 
+          return (
+            <div key={roomIndex} className="mt-6 p-4 bg-gray-50 rounded border">
+              <input
+                placeholder="Room Name (e.g., Kitchen)"
+                value={room.name}
+                onChange={(e) => updateRoomName(roomIndex, e.target.value)}
+                className="mb-2"
+              />
+              <div className="text-sm text-gray-400 mb-2">↕️ Drag to reorder</div>
 
-                    {provided.placeholder}
-                  </div>
-                )}
-              </Droppable>
-            </DragDropContext>
+              <DragDropContext onDragEnd={(result) => handleDragEnd(result, roomIndex)}>
+                <Droppable droppableId={`room-${roomIndex}`}>
+                  {(provided) => (
+                    <div ref={provided.innerRef} {...provided.droppableProps}>
+                      {room.items.map((item, itemIndex) => (
+                        <Draggable key={item.uid} draggableId={item.uid} index={itemIndex}>
+                          {(provided) => (
+                            <div
+                              ref={(el) => {
+                                itemRefs.current[itemIndex] = el;
+                                provided.innerRef(el);
+                              }}
+                              {...provided.draggableProps}
+                              {...provided.dragHandleProps}
+                            >
+                              <LineItem
+                                item={item}
+                                index={itemIndex}
+                                pricing={pricing}
+                                updateLineItem={(index, updatedItem) =>
+                                  updateLineItem(roomIndex, index, updatedItem)
+                                }
+                                removeLineItem={() =>
+                                  removeLineItem(roomIndex, itemIndex)
+                                }
+                              />
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
+                    </div>
+                  )}
+                </Droppable>
+              </DragDropContext>
 
-            <div className="flex justify-between mt-4">
-              <button
-                onClick={() => addLineItemToRoom(roomIndex)}
-                className="bg-blue-600 text-white px-4 py-2 rounded"
-              >
-                + Add Item to {room.name || "Room"}
-              </button>
-              <button onClick={() => removeRoom(roomIndex)} className="text-red-500">
-                🗑️ Remove Room
-              </button>
+              <div className="flex justify-between mt-4">
+                <button onClick={() => addLineItemToRoom(roomIndex)} className="bg-blue-600 text-white px-4 py-2 rounded">
+                  + Add Item to {room.name || "Room"}
+                </button>
+                <button onClick={() => removeRoom(roomIndex)} className="text-red-500">
+                  🗑️ Remove Room
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         <button onClick={addRoom} className="mt-6 bg-blue-600 text-white px-4 py-2 rounded">
           + Add Room
@@ -287,6 +271,8 @@ const EstimateForm = () => {
 };
 
 export default EstimateForm;
+
+
 
 
 
