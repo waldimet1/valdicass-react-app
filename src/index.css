@@ -16,6 +16,12 @@
   font-family: sans-serif;
   text-align: center;
 }
+html, body {
+  height: auto;
+  min-height: 100%;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+}
 
 a {
   font-weight: 500;
