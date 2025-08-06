@@ -18,6 +18,7 @@ const EstimateForm = () => {
   const [isCheckout, setIsCheckout] = useState(false);
   const { pricingMap: pricing } = usePricing();
   const navigate = useNavigate();
+const itemRefsMap = useRef({});
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -177,12 +178,19 @@ const EstimateForm = () => {
         <input name="clientEmail" value={client.clientEmail} onChange={handleClientChange} placeholder="Client Email" type="email" />
 
         {/* Rooms */}
-        {rooms.map((room, roomIndex) => {
-          const itemRefs = useRef([]);
+       {rooms.map((room, roomIndex) => {
+  if (!itemRefsMap.current[roomIndex]) {
+    itemRefsMap.current[roomIndex] = [];
+  }
+  const itemRefs = itemRefsMap.current[roomIndex];
+
 
           useEffect(() => {
-            itemRefs.current = itemRefs.current.slice(0, room.items.length);
-          }, [room.items.length]);
+  const refs = itemRefsMap.current[roomIndex];
+  const lastIndex = rooms[roomIndex]?.items?.length - 1;
+  refs?.[lastIndex]?.scrollIntoView({ behavior: "smooth", block: "start" });
+}, [rooms[roomIndex]?.items?.length]);
+
 
           useEffect(() => {
             if (room.items.length > 0) {
@@ -210,9 +218,10 @@ const EstimateForm = () => {
                           {(provided) => (
                             <div
                               ref={(el) => {
-                                itemRefs.current[itemIndex] = el;
-                                provided.innerRef(el);
-                              }}
+  itemRefs[itemIndex] = el;
+  provided.innerRef(el);
+}}
+
                               {...provided.draggableProps}
                               {...provided.dragHandleProps}
                             >
