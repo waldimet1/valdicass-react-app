@@ -6,13 +6,14 @@ import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { auth, db } from "./firebaseConfig";
 import "./SalesDashboard.css";
-console.log("✅ SalesDashboard rendered");
-console.log("📦 JSX update test: SalesDashboard.jsx loaded");
 
 const SalesDashboardLiveTest = () => {
   const [quotes, setQuotes] = useState([]);
+  const [filteredQuotes, setFilteredQuotes] = useState([]);
+  const [activeTab, setActiveTab] = useState("All");
   const [user, setUser] = useState(null);
   const navigate = useNavigate();
+
 
   useEffect(() => {
     let unsubscribeQuotes;
@@ -20,7 +21,7 @@ const SalesDashboardLiveTest = () => {
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
-       const q = query(collection(db, "quotes"), where("userId", "==", currentUser.uid));
+        const q = query(collection(db, "quotes"), where("userId", "==", currentUser.uid));
 
         unsubscribeQuotes = onSnapshot(q, (snapshot) => {
           const quoteData = snapshot.docs.map((doc) => ({
@@ -39,6 +40,33 @@ const SalesDashboardLiveTest = () => {
       unsubscribeAuth();
     };
   }, []);
+
+  useEffect(() => {
+    filterQuotes();
+  }, [quotes, activeTab]);
+
+  const filterQuotes = () => {
+    switch (activeTab) {
+      case "Sent":
+        setFilteredQuotes(
+          quotes.filter((q) => !q.viewed && !q.signed && !q.declined)
+        );
+        break;
+      case "Viewed":
+        setFilteredQuotes(
+          quotes.filter((q) => q.viewed && !q.signed && !q.declined)
+        );
+        break;
+      case "Signed":
+        setFilteredQuotes(quotes.filter((q) => q.signed));
+        break;
+      case "Declined":
+        setFilteredQuotes(quotes.filter((q) => q.declined));
+        break;
+      default:
+        setFilteredQuotes(quotes);
+    }
+  };
 
   const handleView = (quoteId) => navigate(`/view?id=${quoteId}`);
   const handleEdit = (quoteId) => navigate(`/edit?id=${quoteId}`);
@@ -86,57 +114,69 @@ const SalesDashboardLiveTest = () => {
 
   return (
     <div className="dashboard-container">
- <h1 className="dashboard-title">🚨 JSX UPDATE TEST WORKING</h1>
+      <h1 className="dashboard-title">My Quotes</h1>
 
+      {/* Filter Tabs */}
+      <div className="dashboard-tabs">
+        {["All", "Sent", "Viewed", "Signed", "Declined"].map((tab) => (
+          <button
+            key={tab}
+            className={`tab-button ${activeTab === tab ? "active" : ""}`}
+            onClick={() => setActiveTab(tab)}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
 
-  {quotes.length === 0 ? (
-    <p>No quotes found.</p>
-  ) : (
-    <div className="quote-grid">
-      {quotes.map((q) => (
-        <div key={q.id} className="quote-card-modern">
-          <div className="quote-card-header">
-            <div>
-              <h2 className="client-name">{q.client?.name || "Unnamed Client"}</h2>
-              <p className="quote-meta">
-                {q.location || "No location"}<br />
-                {`${q.material || ""} ${q.series || ""} ${q.style || ""}`}
-              </p>
-            </div>
-            <div className={`status-tag ${q.signed ? 'signed' : q.declined ? 'declined' : q.viewed ? 'viewed' : 'sent'}`}>
-              {q.declined
-                ? "Declined"
-                : q.signed
-                ? "Signed"
-                : q.viewed
-                ? "Viewed"
-                : "Sent"}
-            </div>
-          </div>
+      {filteredQuotes.length === 0 ? (
+        <p>No quotes found for "{activeTab}".</p>
+      ) : (
+        <div className="quote-grid">
+          {filteredQuotes.map((q) => (
+            <div key={q.id} className="quote-card-modern">
+              <div className="quote-card-header">
+                <div>
+                  <h2 className="client-name">{q.client?.name || "Unnamed Client"}</h2>
+                  <p className="quote-meta">
+                    {q.location || "No location"}<br />
+                    {`${q.material || ""} ${q.series || ""} ${q.style || ""}`}
+                  </p>
+                </div>
+                <div className={`status-tag ${q.signed ? "signed" : q.declined ? "declined" : q.viewed ? "viewed" : "sent"}`}>
+                  {q.declined
+                    ? "Declined"
+                    : q.signed
+                    ? "Signed"
+                    : q.viewed
+                    ? "Viewed"
+                    : "Sent"}
+                </div>
+              </div>
 
-          <div className="quote-card-body">
-            <div className="total-display">
-              <strong>Total:</strong> ${q.total?.toLocaleString() || "N/A"}
+              <div className="quote-card-body">
+                <div className="total-display">
+                  <strong>Total:</strong> ${q.total?.toLocaleString() || "N/A"}
+                </div>
+                <div className="button-group">
+                  <button onClick={() => handleView(q.id)} className="btn btn-view">View</button>
+                  <button onClick={() => handleResend(q)} className="btn btn-resend">Resend</button>
+                  <button onClick={() => handleEdit(q.id)} className="btn btn-edit">✏️ Edit</button>
+                  <button onClick={() => handleDownload(q.id)} className="btn btn-download">Download</button>
+                </div>
+              </div>
             </div>
-            <div className="button-group">
-              <button onClick={() => handleView(q.id)} className="btn btn-view">View</button>
-              <button onClick={() => handleResend(q)} className="btn btn-resend">Resend</button>
-              <button onClick={() => handleEdit(q.id)} className="btn btn-edit">✏️ Edit</button>
-              <button onClick={() => handleDownload(q.id)} className="btn btn-download">Download</button>
-            </div>
-          </div>
+          ))}
         </div>
-      ))}
+      )}
+
+      <ToastContainer />
     </div>
-  )}
-
-  <ToastContainer />
-</div>
-
   );
 };
 
 export default SalesDashboardLiveTest;
+
 
 
 
