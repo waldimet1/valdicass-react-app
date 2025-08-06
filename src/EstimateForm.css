@@ -1,18 +1,17 @@
 /* src/EstimateForm.css */
-
 html, body, #root {
-  height: 100%;
+  height: auto;
+  min-height: 100vh;
+  overflow-y: auto;
   margin: 0;
   padding: 0;
 }
 
 body {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background-color: #f9fafb;
   font-family: system-ui, sans-serif;
+  background-color: #f9fafb;
 }
+
 
 #root {
   width: 100%;

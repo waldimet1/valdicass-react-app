@@ -181,7 +181,7 @@ const EstimateForm = () => {
   };
 
   return (
-    <div className="min-h-screen px-4 py-6 bg-gray-100">
+   <div className="px-4 py-6 bg-gray-100">
       <div className="estimate-container max-w-5xl mx-auto bg-white p-6 rounded shadow-md">
         <img src={valdicassLogo} alt="Valdicass Logo" className="valdicass-header-logo" />
         <h1 className="form-title mb-4">Estimate Form</h1>

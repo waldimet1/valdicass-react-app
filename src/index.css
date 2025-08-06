@@ -18,10 +18,9 @@
 }
 html, body {
   height: auto;
-  min-height: 100%;
-  overflow-x: hidden;
-  scroll-behavior: smooth;
+  overflow-y: auto;
 }
+
 
 a {
   font-weight: 500;
@@ -34,11 +33,11 @@ a:hover {
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
+  overflow-y: auto;
 }
+
 
 h1 {
   font-size: 3.2em;
