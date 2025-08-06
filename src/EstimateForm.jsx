@@ -1,5 +1,6 @@
 // EstimateForm.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+
 import { collection, addDoc, Timestamp } from "firebase/firestore";
 import { db, auth } from "./firebaseConfig";
 import LineItem from "./LineItem";
