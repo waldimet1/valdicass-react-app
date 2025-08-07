@@ -39,12 +39,11 @@ const EstimateForm = () => {
   }, [rooms]);
 
   const getPrice = (pricingMap, item) => {
-  const styleData = pricingMap?.[item.material]?.[item.series]?.[item.style];
-  if (typeof styleData === "number") return styleData;
-  if (styleData?.Standard) return styleData.Standard;
-  return 0;
-};
-
+    const styleData = pricingMap?.[item.material]?.[item.series]?.[item.style];
+    if (typeof styleData === "number") return styleData;
+    if (styleData?.Standard) return styleData.Standard;
+    return 0;
+  };
 
   const handleClientChange = (e) => {
     const { name, value } = e.target;
@@ -158,18 +157,34 @@ const EstimateForm = () => {
     }
 
     try {
+      const now = Timestamp.now();
+
       const quote = {
         client,
         rooms,
         subtotal,
         tax,
         total,
+
+        // ✅ status model for dashboard filters
+        status: "sent",           // "sent" | "viewed" | "signed" | "declined"
         viewed: false,
-        createdAt: Timestamp.now(),
+        signed: false,
+        declined: false,
+        statusTimestamps: {
+          sent: now,
+          viewed: null,
+          signed: null,
+          declined: null,
+        },
+
+        // existing fields
+        createdAt: now,
         userId: auth.currentUser.uid,
         userEmail: auth.currentUser.email,
-        date: Timestamp.now(),
+        date: now,
       };
+
       await addDoc(collection(db, "quotes"), quote);
       alert("✅ Quote saved!");
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -181,7 +196,7 @@ const EstimateForm = () => {
   };
 
   return (
-   <div className="px-4 py-6 bg-gray-100">
+    <div className="px-4 py-6 bg-gray-100">
       <div className="estimate-container max-w-5xl mx-auto bg-white p-6 rounded shadow-md">
         <img src={valdicassLogo} alt="Valdicass Logo" className="valdicass-header-logo" />
         <h1 className="form-title mb-4">Estimate Form</h1>
@@ -205,53 +220,47 @@ const EstimateForm = () => {
               />
               <div className="text-sm text-gray-400 mb-2">↕️ Drag to reorder</div>
 
-             <DragDropContext onDragEnd={(result) => handleDragEnd(result, roomIndex)}>
-<Droppable
-  droppableId={`room-${roomIndex}`}
-  isDropDisabled={false}
-  isCombineEnabled={false}
-  ignoreContainerClipping={false}
->
-    {(provided) => (
-      <div
-        {...provided.droppableProps}
-        ref={provided.innerRef}
-      >
-        {room.items.map((item, itemIndex) => (
-          <Draggable key={item.uid} draggableId={item.uid} index={itemIndex}>
-  {(provided) => (
-    <div
-      ref={(el) => {
-        if (!itemRefsMap.current[roomIndex]) {
-          itemRefsMap.current[roomIndex] = [];
-        }
-        itemRefsMap.current[roomIndex][itemIndex] = el;
-        provided.innerRef(el);
-      }}
-      {...provided.draggableProps}
-      {...provided.dragHandleProps}
-    >
-      <LineItem
-        item={item}
-        index={itemIndex}
-        pricing={pricing}
-        updateLineItem={(index, updatedItem) =>
-          updateLineItem(roomIndex, index, updatedItem)
-        }
-        removeLineItem={() => removeLineItem(roomIndex, itemIndex)}
-      />
-    </div>
-  )}
-</Draggable>
-
-        ))}
-        {provided.placeholder}
-      </div>
-    )}
-  </Droppable>
-</DragDropContext>
-
-
+              <DragDropContext onDragEnd={(result) => handleDragEnd(result, roomIndex)}>
+                <Droppable
+                  droppableId={`room-${roomIndex}`}
+                  isDropDisabled={false}
+                  isCombineEnabled={false}
+                  ignoreContainerClipping={false}
+                >
+                  {(provided) => (
+                    <div {...provided.droppableProps} ref={provided.innerRef}>
+                      {room.items.map((item, itemIndex) => (
+                        <Draggable key={item.uid} draggableId={item.uid} index={itemIndex}>
+                          {(provided) => (
+                            <div
+                              ref={(el) => {
+                                if (!itemRefsMap.current[roomIndex]) {
+                                  itemRefsMap.current[roomIndex] = [];
+                                }
+                                itemRefsMap.current[roomIndex][itemIndex] = el;
+                                provided.innerRef(el);
+                              }}
+                              {...provided.draggableProps}
+                              {...provided.dragHandleProps}
+                            >
+                              <LineItem
+                                item={item}
+                                index={itemIndex}
+                                pricing={pricing}
+                                updateLineItem={(index, updatedItem) =>
+                                  updateLineItem(roomIndex, index, updatedItem)
+                                }
+                                removeLineItem={() => removeLineItem(roomIndex, itemIndex)}
+                              />
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
+                    </div>
+                  )}
+                </Droppable>
+              </DragDropContext>
 
               <div className="flex justify-between mt-4">
                 <button onClick={() => addLineItemToRoom(roomIndex)} className="bg-blue-600 text-white px-4 py-2 rounded">
@@ -287,6 +296,8 @@ const EstimateForm = () => {
 };
 
 export default EstimateForm;
+
+
 
 
 
