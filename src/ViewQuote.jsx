@@ -162,6 +162,25 @@ const ViewQuote = () => {
           <div>No items.</div>
         )}
       </section>
+            {/* Actions (only if not already signed/declined) */}
+      {!quote.signed && !quote.declined && (
+        <div style={{ marginTop: 20, display: "flex", gap: 12 }}>
+          <a
+            href={`/sign?id=${quote.id}`}
+            style={{
+              padding: "10px 16px",
+              background: "#0b5fff",
+              color: "#fff",
+              borderRadius: 8,
+              textDecoration: "none",
+              fontWeight: 600,
+            }}
+          >
+            Agree & Sign
+          </a>
+        </div>
+      )}
+
     </div>
   );
 };
