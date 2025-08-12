@@ -52,14 +52,13 @@ const SignQuote = () => {
       return;
     }
     if (!sigRef.current || sigRef.current.isEmpty()) {
-      alert("Please provide your signature.");
+      alert("Please draw your signature.");
       return;
     }
 
     try {
       setSaving(true);
       const dataUrl = sigRef.current.getTrimmedCanvas().toDataURL("image/png");
-
       const ref = doc(db, "quotes", quoteId);
 
       await updateDoc(ref, {
@@ -68,11 +67,11 @@ const SignQuote = () => {
         "statusTimestamps.signed": Timestamp.now(),
         signedBy: fullName.trim(),
         signedAt: Timestamp.now(),
-        signatureDataUrl: dataUrl, // optional, remove if you don't want to store it
+        signatureDataUrl: dataUrl, // remove if you don't want to store image
       });
 
       alert("✅ Thank you! Your quote has been signed.");
-      navigate(`/view-quote?id=${quoteId}`); // or `/view?id=...` if that's your route
+      navigate(`/view-quote?id=${quoteId}`); // or /view?id=... depending on your routes
     } catch (e) {
       console.error(e);
       alert("❌ Failed to submit signature. Please try again.");
@@ -81,12 +80,8 @@ const SignQuote = () => {
     }
   };
 
-  if (loading) {
-    return <div style={{ padding: 24, textAlign: "center" }}>Loading…</div>;
-  }
-  if (error) {
-    return <div style={{ padding: 24, color: "crimson", textAlign: "center" }}>{error}</div>;
-  }
+  if (loading) return <div style={{ padding: 24, textAlign: "center" }}>Loading…</div>;
+  if (error) return <div style={{ padding: 24, color: "crimson", textAlign: "center" }}>{error}</div>;
   if (!quote) return null;
 
   if (quote.signed) {
@@ -110,7 +105,7 @@ const SignQuote = () => {
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
-      <h1 style={{ marginBottom: 16 }}>Sign Your Quote</h1>
+      <h1 style={{ marginBottom: 16 }}>Agree & Sign</h1>
 
       <section style={{ marginBottom: 16 }}>
         <div><strong>Client:</strong> {quote.client?.name || "—"}</div>
@@ -150,6 +145,7 @@ const SignQuote = () => {
           backgroundColor="#fff"
         />
       </div>
+
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         <button onClick={clearSignature}>Clear</button>
         <button onClick={() => navigate(`/view-quote?id=${quoteId}`)}>Back</button>
@@ -167,3 +163,4 @@ const SignQuote = () => {
 };
 
 export default SignQuote;
+

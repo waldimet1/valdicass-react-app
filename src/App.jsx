@@ -18,7 +18,7 @@ import MyQuotes from "./MyQuotes";
 import EstimateForm from "./EstimateForm";
 import QuoteDetail from "./QuoteDetail";
 import { auth } from "./firebaseConfig";
-
+import SignQuote from "./SignQuote";
 const ADMIN_UID = "REuTGQ98bAM0riY9xidS8fW6obl2";
 
 const App = () => {
@@ -58,6 +58,7 @@ const App = () => {
         <Route path="/my-quotes" element={<MyQuotes />} />
         <Route path="/estimate" element={<EstimateForm />} />
         <Route path="/quote/:id" element={<QuoteDetail />} />
+        <Route path="/sign" element={<SignQuote />} />
         <Route
           path="/admin"
           element={
