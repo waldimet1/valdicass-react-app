@@ -4,6 +4,18 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { doc, getDoc, updateDoc, Timestamp } from "firebase/firestore";
 import { db } from "./firebaseConfig";
 
+async function notifyAdmin(event, data) {
+  try {
+    await fetch("https://valdicass-server.vercel.app/notifyQuoteEvent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event, ...data }),
+    });
+  } catch (e) {
+    console.warn("Notify admin failed:", e);
+  }
+}
+
 const DeclineQuote = () => {
   const [searchParams] = useSearchParams();
   const quoteId = searchParams.get("id");
@@ -60,6 +72,16 @@ const DeclineQuote = () => {
         declinedBy: fullName.trim(),
         declinedAt: Timestamp.now(),
         declinedReason: reason.trim() || null,
+      });
+
+      // notify admin
+      notifyAdmin("declined", {
+        quoteId,
+        clientName: quote?.client?.name || "",
+        clientEmail: quote?.client?.clientEmail || "",
+        total: quote?.total || 0,
+        declinedBy: fullName.trim(),
+        declinedReason: reason.trim() || "",
       });
 
       alert("✅ This quote has been marked as declined.");
@@ -154,3 +176,4 @@ const DeclineQuote = () => {
 };
 
 export default DeclineQuote;
+

@@ -4,6 +4,19 @@ import { useSearchParams } from "react-router-dom";
 import { doc, getDoc, updateDoc, Timestamp } from "firebase/firestore";
 import { db } from "./firebaseConfig";
 
+async function notifyAdmin(event, data) {
+  try {
+    await fetch("https://valdicass-server.vercel.app/notifyQuoteEvent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event, ...data }),
+    });
+  } catch (e) {
+    // Avoid breaking UX if email fails
+    console.warn("Notify admin failed:", e);
+  }
+}
+
 const ViewQuote = () => {
   const [searchParams] = useSearchParams();
   const quoteId = searchParams.get("id");
@@ -33,24 +46,31 @@ const ViewQuote = () => {
         const data = snap.data();
         setQuote({ id: snap.id, ...data });
 
-        // Only mark as viewed if not already done
+        // Only mark/notify on first view
         if (data.viewed !== true) {
           setMarking(true);
 
           const nextStatus =
             data.status === "signed" || data.status === "declined"
-              ? data.status // don't override terminal states
+              ? data.status
               : "viewed";
 
           await updateDoc(ref, {
             viewed: true,
             status: nextStatus,
-            // nested update for timestamps
             "statusTimestamps.viewed":
               data?.statusTimestamps?.viewed || Timestamp.now(),
           });
 
-          // Refresh local state to reflect the change without a second fetch
+          // fire-and-forget admin notify
+          notifyAdmin("viewed", {
+            quoteId,
+            clientName: data.client?.name || "",
+            clientEmail: data.client?.clientEmail || "",
+            total: data.total || 0,
+          });
+
+          // Update local state
           setQuote((prev) =>
             prev
               ? {
@@ -78,31 +98,10 @@ const ViewQuote = () => {
     fetchAndMarkViewed();
   }, [quoteId]);
 
-  if (loading) {
-    return (
-      <div style={{ padding: 24, textAlign: "center" }}>
-        Loading quote…
-      </div>
-    );
-  }
+  if (loading) return <div style={{ padding: 24, textAlign: "center" }}>Loading quote…</div>;
+  if (error) return <div style={{ padding: 24, color: "crimson", textAlign: "center" }}>{error}</div>;
+  if (!quote) return <div style={{ padding: 24, textAlign: "center" }}>No quote to display.</div>;
 
-  if (error) {
-    return (
-      <div style={{ padding: 24, color: "crimson", textAlign: "center" }}>
-        {error}
-      </div>
-    );
-  }
-
-  if (!quote) {
-    return (
-      <div style={{ padding: 24, textAlign: "center" }}>
-        No quote to display.
-      </div>
-    );
-  }
-
-  // --- Render a simple client-facing preview ---
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
       <header style={{ marginBottom: 16 }}>
@@ -162,9 +161,10 @@ const ViewQuote = () => {
           <div>No items.</div>
         )}
       </section>
-            {/* Actions (only if not already signed/declined) */}
+
+      {/* Actions */}
       {!quote.signed && !quote.declined && (
-        <div style={{ marginTop: 20, display: "flex", gap: 12 }}>
+        <div style={{ marginTop: 20, display: "flex", gap: 12, flexWrap: "wrap" }}>
           <a
             href={`/sign?id=${quote.id}`}
             style={{
@@ -178,43 +178,26 @@ const ViewQuote = () => {
           >
             Agree & Sign
           </a>
+          <a
+            href={`/decline?id=${quote.id}`}
+            style={{
+              padding: "10px 16px",
+              background: "#dc2626",
+              color: "#fff",
+              borderRadius: 8,
+              textDecoration: "none",
+              fontWeight: 600,
+            }}
+          >
+            Decline Quote
+          </a>
         </div>
       )}
-{!quote.signed && !quote.declined && (
-  <div style={{ marginTop: 20, display: "flex", gap: 12, flexWrap: "wrap" }}>
-    <a
-      href={`/sign?id=${quote.id}`}
-      style={{
-        padding: "10px 16px",
-        background: "#0b5fff",
-        color: "#fff",
-        borderRadius: 8,
-        textDecoration: "none",
-        fontWeight: 600,
-      }}
-    >
-      Agree & Sign
-    </a>
-
-    <a
-      href={`/decline?id=${quote.id}`}
-      style={{
-        padding: "10px 16px",
-        background: "#dc2626",
-        color: "#fff",
-        borderRadius: 8,
-        textDecoration: "none",
-        fontWeight: 600,
-      }}
-    >
-      Decline Quote
-    </a>
-  </div>
-)}
-
     </div>
   );
 };
 
 export default ViewQuote;
+
+
 

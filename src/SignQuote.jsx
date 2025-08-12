@@ -5,6 +5,18 @@ import SignatureCanvas from "react-signature-canvas";
 import { doc, getDoc, updateDoc, Timestamp } from "firebase/firestore";
 import { db } from "./firebaseConfig";
 
+async function notifyAdmin(event, data) {
+  try {
+    await fetch("https://valdicass-server.vercel.app/notifyQuoteEvent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event, ...data }),
+    });
+  } catch (e) {
+    console.warn("Notify admin failed:", e);
+  }
+}
+
 const SignQuote = () => {
   const [searchParams] = useSearchParams();
   const quoteId = searchParams.get("id");
@@ -67,11 +79,20 @@ const SignQuote = () => {
         "statusTimestamps.signed": Timestamp.now(),
         signedBy: fullName.trim(),
         signedAt: Timestamp.now(),
-        signatureDataUrl: dataUrl, // remove if you don't want to store image
+        signatureDataUrl: dataUrl,
+      });
+
+      // notify admin
+      notifyAdmin("signed", {
+        quoteId,
+        clientName: quote?.client?.name || "",
+        clientEmail: quote?.client?.clientEmail || "",
+        total: quote?.total || 0,
+        signedBy: fullName.trim(),
       });
 
       alert("✅ Thank you! Your quote has been signed.");
-      navigate(`/view-quote?id=${quoteId}`); // or /view?id=... depending on your routes
+      navigate(`/view-quote?id=${quoteId}`);
     } catch (e) {
       console.error(e);
       alert("❌ Failed to submit signature. Please try again.");
@@ -163,4 +184,5 @@ const SignQuote = () => {
 };
 
 export default SignQuote;
+
 
