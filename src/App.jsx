@@ -12,7 +12,7 @@ import "react-toastify/dist/ReactToastify.css";
 import AdminPanel from "./AdminPanel";
 import AuthForm from "./AuthForm";
 import SalesDashboardLiveTest from "./SalesDashboardLiveTest";
-
+import DeclineQuote from "./DeclineQuote";
 import ViewQuote from "./ViewQuote";
 import MyQuotes from "./MyQuotes";
 import EstimateForm from "./EstimateForm";
@@ -59,6 +59,7 @@ const App = () => {
         <Route path="/estimate" element={<EstimateForm />} />
         <Route path="/quote/:id" element={<QuoteDetail />} />
         <Route path="/sign" element={<SignQuote />} />
+        <Route path="/decline" element={<DeclineQuote />} />
         <Route
           path="/admin"
           element={

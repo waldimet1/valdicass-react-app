@@ -180,6 +180,37 @@ const ViewQuote = () => {
           </a>
         </div>
       )}
+{!quote.signed && !quote.declined && (
+  <div style={{ marginTop: 20, display: "flex", gap: 12, flexWrap: "wrap" }}>
+    <a
+      href={`/sign?id=${quote.id}`}
+      style={{
+        padding: "10px 16px",
+        background: "#0b5fff",
+        color: "#fff",
+        borderRadius: 8,
+        textDecoration: "none",
+        fontWeight: 600,
+      }}
+    >
+      Agree & Sign
+    </a>
+
+    <a
+      href={`/decline?id=${quote.id}`}
+      style={{
+        padding: "10px 16px",
+        background: "#dc2626",
+        color: "#fff",
+        borderRadius: 8,
+        textDecoration: "none",
+        fontWeight: 600,
+      }}
+    >
+      Decline Quote
+    </a>
+  </div>
+)}
 
     </div>
   );
