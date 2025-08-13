@@ -19,6 +19,9 @@ const EstimateForm = () => {
   const [isCheckout, setIsCheckout] = useState(false);
   const { pricingMap: pricing } = usePricing();
   const navigate = useNavigate();
+const [shareUrl, setShareUrl] = useState("");
+const [showShare, setShowShare] = useState(false);
+const [sending, setSending] = useState(false);
 
   // One ref object to store item refs per room
   const itemRefsMap = useRef({});
@@ -145,60 +148,145 @@ const EstimateForm = () => {
     calculateTotal();
   }, [rooms]);
 
-  const saveQuoteToFirestore = async () => {
-    setIsCheckout(true);
-    if (!auth.currentUser) {
-      alert("You must be logged in.");
-      return;
-    }
-    if (!client.name || !client.address || !client.clientEmail) {
-      alert("❌ Please fill out all client info.");
-      return;
-    }
+const saveQuoteToFirestore = async () => {
+  setIsCheckout(true);
+  if (!auth.currentUser) {
+    alert("You must be logged in.");
+    return;
+  }
+  if (!client.name || !client.address || !client.clientEmail) {
+    alert("❌ Please fill out all client info.");
+    return;
+  }
 
-    try {
-      const now = Timestamp.now();
+  try {
+    const now = Timestamp.now();
+    const quote = {
+      client,
+      rooms,
+      subtotal,
+      tax,
+      total,
+      // ✅ status model (so it shows under “Sent”)
+      status: "sent",
+      viewed: false,
+      signed: false,
+      declined: false,
+      statusTimestamps: {
+        sent: now,
+        viewed: null,
+        signed: null,
+        declined: null,
+      },
+      createdAt: now,
+      userId: auth.currentUser.uid,
+      userEmail: auth.currentUser.email,
+      date: now,
+    };
 
-      const quote = {
-        client,
-        rooms,
-        subtotal,
-        tax,
-        total,
+    const docRef = await addDoc(collection(db, "quotes"), quote);
 
-        // ✅ status model for dashboard filters
-        status: "sent",           // "sent" | "viewed" | "signed" | "declined"
-        viewed: false,
-        signed: false,
-        declined: false,
-        statusTimestamps: {
-          sent: now,
-          viewed: null,
-          signed: null,
-          declined: null,
-        },
+    // Build client link (use your production domain)
+    const base = window.location.origin.includes("localhost")
+      ? "http://localhost:3000"
+      : "https://app.valdicass.com";
+    const url = `${base}/view-quote?id=${docRef.id}`;
 
-        // existing fields
-        createdAt: now,
-        userId: auth.currentUser.uid,
-        userEmail: auth.currentUser.email,
-        date: now,
-      };
+    setShareUrl(url);
+    setShowShare(true);
 
-      await addDoc(collection(db, "quotes"), quote);
-      alert("✅ Quote saved!");
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      navigate("/dashboard");
-    } catch (error) {
-      console.error("🔥 Save error:", error);
-      alert(`❌ Error: ${error.message}`);
-    }
-  };
+    // optional: scroll to top to reveal the panel
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+  } catch (error) {
+    console.error("🔥 Save error:", error);
+    alert(`❌ Error: ${error.message}`);
+  } finally {
+    setIsCheckout(false);
+  }
+};
+const sendQuoteEmail = async () => {
+  if (!shareUrl) return;
+  try {
+    setSending(true);
+    const res = await fetch("https://valdicass-server.vercel.app/sendQuoteEmail", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        // You can pass more details if your server expects them
+        clientEmail: client.clientEmail,
+        clientName: client.name,
+        shareUrl,
+      }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json?.error || "Failed to send");
+    alert("✅ Email sent to client!");
+  } catch (e) {
+    console.error(e);
+    alert("❌ Could not send email. Check server logs or endpoint.");
+  } finally {
+    setSending(false);
+  }
+};
+
 
   return (
     <div className="px-4 py-6 bg-gray-100">
       <div className="estimate-container max-w-5xl mx-auto bg-white p-6 rounded shadow-md">
         <img src={valdicassLogo} alt="Valdicass Logo" className="valdicass-header-logo" />
+        {showShare && (
+  <div
+    style={{
+      background: "#f0f7ff",
+      border: "1px solid #cfe3ff",
+      padding: "12px",
+      borderRadius: 10,
+      marginBottom: 12,
+    }}
+  >
+    <div style={{ fontWeight: 700, marginBottom: 6 }}>✅ Quote saved</div>
+    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+      <input
+        value={shareUrl}
+        readOnly
+        style={{ flex: 1, minWidth: 240, padding: 8, borderRadius: 6, border: "1px solid #bcd2ff" }}
+        onFocus={(e) => e.target.select()}
+      />
+      <button
+        onClick={() => {
+          navigator.clipboard.writeText(shareUrl);
+          alert("Link copied!");
+        }}
+        className="bg-blue-600 text-white px-4 py-2 rounded"
+      >
+        Copy Link
+      </button>
+      <a
+        href={shareUrl}
+        className="bg-gray-700 text-white px-4 py-2 rounded"
+        target="_blank"
+        rel="noreferrer"
+      >
+        View Client Preview
+      </a>
+      <button
+        onClick={sendQuoteEmail}
+        disabled={sending}
+        className="bg-green-600 text-white px-4 py-2 rounded"
+      >
+        {sending ? "Sending…" : "Send to Client"}
+      </button>
+      <button
+        onClick={() => navigate("/dashboard")}
+        className="bg-black text-white px-4 py-2 rounded"
+      >
+        Go to Dashboard
+      </button>
+    </div>
+  </div>
+)}
+
         <h1 className="form-title mb-4">Estimate Form</h1>
 
         {/* Client Info */}

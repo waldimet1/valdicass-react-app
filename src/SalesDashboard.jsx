@@ -15,6 +15,7 @@ const SalesDashboardLiveTest = () => {
   const [filteredQuotes, setFilteredQuotes] = useState([]);
   const [activeTab, setActiveTab] = useState("All");
   const [user, setUser] = useState(null);
+  const [sendingId, setSendingId] = useState(null); // ✅ disable resend per-quote while sending
   const navigate = useNavigate();
 
   // track previous states per doc to detect transitions
@@ -144,6 +145,7 @@ const SalesDashboardLiveTest = () => {
     }
   };
 
+  // ✅ Robust resend that builds the exact client link and disables while sending
   const handleResend = async (quote) => {
     const email = quote.client?.clientEmail || quote.client?.email; // support both shapes
     if (!email) {
@@ -151,23 +153,36 @@ const SalesDashboardLiveTest = () => {
       return;
     }
     try {
+      setSendingId(quote.id);
+
+      // build the client-facing link
+      const base = window.location.origin.includes("localhost")
+        ? "http://localhost:3000"
+        : "https://app.valdicass.com";
+      const shareUrl = `${base}/view-quote?id=${quote.id}`;
+
       const res = await fetch("https://valdicass-server.vercel.app/sendQuoteEmail", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           quoteId: quote.id,
           clientEmail: email,
+          clientName: quote.client?.name || "",
+          total: Number(quote.total || 0),
+          shareUrl, // include the exact link the client should open
         }),
       });
       const result = await res.json().catch(() => ({}));
       if (res.ok) {
-        toast.success("✅ Quote re-sent!", { autoClose: 3000 });
+        toast.success("✅ Quote re-sent to client");
       } else {
-        toast.error("❌ Failed to resend quote" + (result?.error ? `: ${result.error}` : ""));
+        toast.error("❌ Failed to resend" + (result?.error ? `: ${result.error}` : ""));
       }
     } catch (err) {
       console.error("❌ Error resending quote:", err);
       toast.error("❌ Failed to resend quote.");
+    } finally {
+      setSendingId(null);
     }
   };
 
@@ -232,7 +247,13 @@ const SalesDashboardLiveTest = () => {
                 </div>
                 <div className="button-group">
                   <button onClick={() => handleView(q.id)} className="btn btn-view">View</button>
-                  <button onClick={() => handleResend(q)} className="btn btn-resend">Resend</button>
+                  <button
+                    onClick={() => handleResend(q)}
+                    className="btn btn-resend"
+                    disabled={sendingId === q.id}
+                  >
+                    {sendingId === q.id ? "Sending…" : "Resend"}
+                  </button>
                   <button onClick={() => handleEdit(q.id)} className="btn btn-edit">✏️ Edit</button>
                   <button onClick={() => handleDownload(q.id)} className="btn btn-download">Download</button>
                 </div>
@@ -248,6 +269,7 @@ const SalesDashboardLiveTest = () => {
 };
 
 export default SalesDashboardLiveTest;
+
 
 
 
