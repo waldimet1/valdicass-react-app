@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+// src/SalesDashboard.jsx
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
@@ -7,6 +8,8 @@ import "react-toastify/dist/ReactToastify.css";
 import { auth, db } from "./firebaseConfig";
 import "./SalesDashboard.css";
 
+const ADMIN_UID = "REuTGQ98bAM0riY9xidS8fW6obl2"; // same as App.jsx
+
 const SalesDashboardLiveTest = () => {
   const [quotes, setQuotes] = useState([]);
   const [filteredQuotes, setFilteredQuotes] = useState([]);
@@ -14,6 +17,8 @@ const SalesDashboardLiveTest = () => {
   const [user, setUser] = useState(null);
   const navigate = useNavigate();
 
+  // track previous states per doc to detect transitions
+  const prevMapRef = useRef(new Map()); // id -> { viewed, signed, declined, status }
 
   useEffect(() => {
     let unsubscribeQuotes;
@@ -24,14 +29,70 @@ const SalesDashboardLiveTest = () => {
         const q = query(collection(db, "quotes"), where("userId", "==", currentUser.uid));
 
         unsubscribeQuotes = onSnapshot(q, (snapshot) => {
-          const quoteData = snapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          }));
-          setQuotes(quoteData);
+          // --- Real-time toast for admin on changes ---
+          if (currentUser.uid === ADMIN_UID) {
+            snapshot.docChanges().forEach((change) => {
+              const id = change.doc.id;
+              const data = { id, ...change.doc.data() };
+
+              // Build normalized current flags
+              const curr = {
+                viewed: data.viewed === true || (data.status || "").toLowerCase() === "viewed",
+                signed: data.signed === true || (data.status || "").toLowerCase() === "signed",
+                declined: data.declined === true || (data.status || "").toLowerCase() === "declined",
+                status: (data.status || "").toLowerCase(),
+              };
+
+              const prev = prevMapRef.current.get(id);
+
+              if (change.type === "added") {
+                // initialize prev cache without toasting on initial load
+                prevMapRef.current.set(id, curr);
+                return;
+              }
+
+              if (change.type === "modified" && prev) {
+                // Detect transitions
+                const client = data.client?.name || "Client";
+                if (!prev.viewed && curr.viewed) {
+                  toast.info(`👀 ${client} viewed quote • $${Number(data.total || 0).toLocaleString()}`);
+                }
+                if (!prev.signed && curr.signed) {
+                  toast.success(`✅ ${client} signed quote • $${Number(data.total || 0).toLocaleString()}`);
+                }
+                if (!prev.declined && curr.declined) {
+                  toast.error(`❌ ${client} declined quote • $${Number(data.total || 0).toLocaleString()}`);
+                }
+                // update cache after checks
+                prevMapRef.current.set(id, curr);
+              } else {
+                // for safety, keep cache in sync
+                prevMapRef.current.set(id, curr);
+              }
+            });
+          }
+
+          // --- Update list in UI ---
+          const list = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+          setQuotes(list);
+
+          // also refresh prevMap on full snapshot (ensures cache never drifts)
+          list.forEach((q) => {
+            const curr = {
+              viewed: q.viewed === true || (q.status || "").toLowerCase() === "viewed",
+              signed: q.signed === true || (q.status || "").toLowerCase() === "signed",
+              declined: q.declined === true || (q.status || "").toLowerCase() === "declined",
+              status: (q.status || "").toLowerCase(),
+            };
+            if (!prevMapRef.current.has(q.id)) {
+              prevMapRef.current.set(q.id, curr);
+            }
+          });
         });
       } else {
         setUser(null);
+        setQuotes([]);
+        prevMapRef.current.clear();
       }
     });
 
@@ -41,34 +102,31 @@ const SalesDashboardLiveTest = () => {
     };
   }, []);
 
-  useEffect(() => {
-    filterQuotes();
-  }, [quotes, activeTab]);
-
-  const filterQuotes = () => {
-    switch (activeTab) {
-      case "Sent":
-        setFilteredQuotes(
-          quotes.filter((q) => !q.viewed && !q.signed && !q.declined)
-        );
-        break;
-      case "Viewed":
-        setFilteredQuotes(
-          quotes.filter((q) => q.viewed && !q.signed && !q.declined)
-        );
-        break;
-      case "Signed":
-        setFilteredQuotes(quotes.filter((q) => q.signed));
-        break;
-      case "Declined":
-        setFilteredQuotes(quotes.filter((q) => q.declined));
-        break;
-      default:
-        setFilteredQuotes(quotes);
-    }
+  // Normalize helper shared with filters
+  const normalize = (q) => {
+    const status = (q.status || "").toLowerCase();
+    const viewed = q.viewed === true || status === "viewed";
+    const signed = q.signed === true || status === "signed";
+    const declined = q.declined === true || status === "declined";
+    const sent =
+      (!viewed && !signed && !declined) || status === "sent" || status === "";
+    return { viewed, signed, declined, sent };
   };
 
-  const handleView = (quoteId) => navigate(`/view?id=${quoteId}`);
+  useEffect(() => {
+    const out = quotes.filter((q) => {
+      const s = normalize(q);
+      if (activeTab === "All") return true;
+      if (activeTab === "Sent") return s.sent;
+      if (activeTab === "Viewed") return s.viewed && !s.signed && !s.declined;
+      if (activeTab === "Signed") return s.signed;
+      if (activeTab === "Declined") return s.declined;
+      return true;
+    });
+    setFilteredQuotes(out);
+  }, [quotes, activeTab]);
+
+  const handleView = (quoteId) => navigate(`/view-quote?id=${quoteId}`); // match your route
   const handleEdit = (quoteId) => navigate(`/edit?id=${quoteId}`);
 
   const handleDownload = async (quoteId) => {
@@ -87,7 +145,8 @@ const SalesDashboardLiveTest = () => {
   };
 
   const handleResend = async (quote) => {
-    if (!quote.client?.email) {
+    const email = quote.client?.clientEmail || quote.client?.email; // support both shapes
+    if (!email) {
       toast.error("❌ This quote has no client email on file.");
       return;
     }
@@ -97,20 +156,33 @@ const SalesDashboardLiveTest = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           quoteId: quote.id,
-          clientEmail: quote.client.email,
+          clientEmail: email,
         }),
       });
-      const result = await res.json();
+      const result = await res.json().catch(() => ({}));
       if (res.ok) {
         toast.success("✅ Quote re-sent!", { autoClose: 3000 });
       } else {
-        toast.error("❌ Failed to resend quote: " + result.error);
+        toast.error("❌ Failed to resend quote" + (result?.error ? `: ${result.error}` : ""));
       }
     } catch (err) {
       console.error("❌ Error resending quote:", err);
       toast.error("❌ Failed to resend quote.");
     }
   };
+
+  // Optional: show counts on tabs
+  const tabCounts = useMemo(() => {
+    const counts = { All: quotes.length, Sent: 0, Viewed: 0, Signed: 0, Declined: 0 };
+    quotes.forEach((q) => {
+      const s = normalize(q);
+      if (s.sent) counts.Sent++;
+      if (s.viewed && !s.signed && !s.declined) counts.Viewed++;
+      if (s.signed) counts.Signed++;
+      if (s.declined) counts.Declined++;
+    });
+    return counts;
+  }, [quotes]);
 
   return (
     <div className="dashboard-container">
@@ -124,7 +196,7 @@ const SalesDashboardLiveTest = () => {
             className={`tab-button ${activeTab === tab ? "active" : ""}`}
             onClick={() => setActiveTab(tab)}
           >
-            {tab}
+            {tab} {tabCounts[tab] !== undefined ? `(${tabCounts[tab]})` : ""}
           </button>
         ))}
       </div>
@@ -143,12 +215,12 @@ const SalesDashboardLiveTest = () => {
                     {`${q.material || ""} ${q.series || ""} ${q.style || ""}`}
                   </p>
                 </div>
-                <div className={`status-tag ${q.signed ? "signed" : q.declined ? "declined" : q.viewed ? "viewed" : "sent"}`}>
-                  {q.declined
+                <div className={`status-tag ${normalize(q).signed ? "signed" : normalize(q).declined ? "declined" : normalize(q).viewed ? "viewed" : "sent"}`}>
+                  {normalize(q).declined
                     ? "Declined"
-                    : q.signed
+                    : normalize(q).signed
                     ? "Signed"
-                    : q.viewed
+                    : normalize(q).viewed
                     ? "Viewed"
                     : "Sent"}
                 </div>
@@ -156,7 +228,7 @@ const SalesDashboardLiveTest = () => {
 
               <div className="quote-card-body">
                 <div className="total-display">
-                  <strong>Total:</strong> ${q.total?.toLocaleString() || "N/A"}
+                  <strong>Total:</strong> ${Number(q.total || 0).toLocaleString()}
                 </div>
                 <div className="button-group">
                   <button onClick={() => handleView(q.id)} className="btn btn-view">View</button>
@@ -170,7 +242,7 @@ const SalesDashboardLiveTest = () => {
         </div>
       )}
 
-      <ToastContainer />
+      <ToastContainer position="top-right" autoClose={3500} />
     </div>
   );
 };
