@@ -209,7 +209,8 @@ const sendQuoteEmail = async () => {
   if (!shareUrl) return;
   try {
     setSending(true);
-    const res = await fetch("https://valdicass-server.vercel.app/sendQuoteEmail", {
+    const res = await fetch("https://valdicass-sendquote-api.vercel.app
+/sendQuoteEmail", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

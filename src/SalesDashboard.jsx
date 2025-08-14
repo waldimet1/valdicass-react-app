@@ -132,7 +132,7 @@ const SalesDashboardLiveTest = () => {
 
   const handleDownload = async (quoteId) => {
     try {
-      const url = `https://valdicass-server.vercel.app/downloadQuotePdf?quoteId=${quoteId}`;
+      const url = `https://valdicass-sendquote-api.vercel.app/downloadQuotePdf?quoteId=${quoteId}`;
       const link = document.createElement("a");
       link.href = url;
       link.download = `quote-${quoteId}.pdf`;
@@ -161,7 +161,7 @@ const SalesDashboardLiveTest = () => {
         : "https://app.valdicass.com";
       const shareUrl = `${base}/view-quote?id=${quote.id}`;
 
-      const res = await fetch("https://valdicass-server.vercel.app/sendQuoteEmail", {
+      const res = await fetch("https://valdicass-sendquote-api.vercel.app/sendQuoteEmail", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
