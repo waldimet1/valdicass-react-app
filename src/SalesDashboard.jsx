@@ -10,12 +10,14 @@ import "./SalesDashboard.css";
 
 const ADMIN_UID = "REuTGQ98bAM0riY9xidS8fW6obl2"; // same as App.jsx
 
+// 🔗 Point the dashboard to your email API on Vercel
+const API_BASE = "https://valdicass-sendquote-api.vercel.app";
+
 const SalesDashboardLiveTest = () => {
   const [quotes, setQuotes] = useState([]);
   const [filteredQuotes, setFilteredQuotes] = useState([]);
   const [activeTab, setActiveTab] = useState("All");
   const [user, setUser] = useState(null);
-  const [sendingId, setSendingId] = useState(null); // ✅ disable resend per-quote while sending
   const navigate = useNavigate();
 
   // track previous states per doc to detect transitions
@@ -27,7 +29,10 @@ const SalesDashboardLiveTest = () => {
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
-        const q = query(collection(db, "quotes"), where("userId", "==", currentUser.uid));
+        const q = query(
+          collection(db, "quotes"),
+          where("userId", "==", currentUser.uid)
+        );
 
         unsubscribeQuotes = onSnapshot(q, (snapshot) => {
           // --- Real-time toast for admin on changes ---
@@ -38,9 +43,15 @@ const SalesDashboardLiveTest = () => {
 
               // Build normalized current flags
               const curr = {
-                viewed: data.viewed === true || (data.status || "").toLowerCase() === "viewed",
-                signed: data.signed === true || (data.status || "").toLowerCase() === "signed",
-                declined: data.declined === true || (data.status || "").toLowerCase() === "declined",
+                viewed:
+                  data.viewed === true ||
+                  (data.status || "").toLowerCase() === "viewed",
+                signed:
+                  data.signed === true ||
+                  (data.status || "").toLowerCase() === "signed",
+                declined:
+                  data.declined === true ||
+                  (data.status || "").toLowerCase() === "declined",
                 status: (data.status || "").toLowerCase(),
               };
 
@@ -53,36 +64,52 @@ const SalesDashboardLiveTest = () => {
               }
 
               if (change.type === "modified" && prev) {
-                // Detect transitions
                 const client = data.client?.name || "Client";
                 if (!prev.viewed && curr.viewed) {
-                  toast.info(`👀 ${client} viewed quote • $${Number(data.total || 0).toLocaleString()}`);
+                  toast.info(
+                    `👀 ${client} viewed quote • $${Number(
+                      data.total || 0
+                    ).toLocaleString()}`
+                  );
                 }
                 if (!prev.signed && curr.signed) {
-                  toast.success(`✅ ${client} signed quote • $${Number(data.total || 0).toLocaleString()}`);
+                  toast.success(
+                    `✅ ${client} signed quote • $${Number(
+                      data.total || 0
+                    ).toLocaleString()}`
+                  );
                 }
                 if (!prev.declined && curr.declined) {
-                  toast.error(`❌ ${client} declined quote • $${Number(data.total || 0).toLocaleString()}`);
+                  toast.error(
+                    `❌ ${client} declined quote • $${Number(
+                      data.total || 0
+                    ).toLocaleString()}`
+                  );
                 }
-                // update cache after checks
                 prevMapRef.current.set(id, curr);
               } else {
-                // for safety, keep cache in sync
                 prevMapRef.current.set(id, curr);
               }
             });
           }
 
           // --- Update list in UI ---
-          const list = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+          const list = snapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          }));
           setQuotes(list);
 
-          // also refresh prevMap on full snapshot (ensures cache never drifts)
+          // keep cache in sync
           list.forEach((q) => {
             const curr = {
-              viewed: q.viewed === true || (q.status || "").toLowerCase() === "viewed",
-              signed: q.signed === true || (q.status || "").toLowerCase() === "signed",
-              declined: q.declined === true || (q.status || "").toLowerCase() === "declined",
+              viewed:
+                q.viewed === true || (q.status || "").toLowerCase() === "viewed",
+              signed:
+                q.signed === true || (q.status || "").toLowerCase() === "signed",
+              declined:
+                q.declined === true ||
+                (q.status || "").toLowerCase() === "declined",
               status: (q.status || "").toLowerCase(),
             };
             if (!prevMapRef.current.has(q.id)) {
@@ -130,59 +157,39 @@ const SalesDashboardLiveTest = () => {
   const handleView = (quoteId) => navigate(`/view-quote?id=${quoteId}`); // match your route
   const handleEdit = (quoteId) => navigate(`/edit?id=${quoteId}`);
 
-  const handleDownload = async (quoteId) => {
-    try {
-      const url = `https://valdicass-sendquote-api.vercel.app/downloadQuotePdf?quoteId=${quoteId}`;
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `quote-${quoteId}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch (err) {
-      console.error("❌ Error downloading PDF:", err);
-      toast.error("❌ Failed to download quote PDF.");
-    }
-  };
-
-  // ✅ Robust resend that builds the exact client link and disables while sending
+  // 🔁 REPLACED: send email through the Vercel API
   const handleResend = async (quote) => {
     const email = quote.client?.clientEmail || quote.client?.email; // support both shapes
     if (!email) {
       toast.error("❌ This quote has no client email on file.");
       return;
     }
+
+    // The public link your client will open
+    const shareUrl = `https://app.valdicass.com/view-quote?id=${quote.id}`;
+
     try {
-      setSendingId(quote.id);
-
-      // build the client-facing link
-      const base = window.location.origin.includes("localhost")
-        ? "http://localhost:3000"
-        : "https://app.valdicass.com";
-      const shareUrl = `${base}/view-quote?id=${quote.id}`;
-
-      const res = await fetch("https://valdicass-sendquote-api.vercel.app/sendQuoteEmail", {
+      const res = await fetch(`${API_BASE}/api/sendQuoteEmail`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           quoteId: quote.id,
           clientEmail: email,
-          clientName: quote.client?.name || "",
+          clientName: quote.client?.name || "Client",
           total: Number(quote.total || 0),
-          shareUrl, // include the exact link the client should open
+          shareUrl,
         }),
       });
+
       const result = await res.json().catch(() => ({}));
-      if (res.ok) {
-        toast.success("✅ Quote re-sent to client");
-      } else {
-        toast.error("❌ Failed to resend" + (result?.error ? `: ${result.error}` : ""));
+      if (!res.ok) {
+        throw new Error(result?.error || `HTTP ${res.status}`);
       }
+
+      toast.success("✅ Quote sent to client.");
     } catch (err) {
       console.error("❌ Error resending quote:", err);
-      toast.error("❌ Failed to resend quote.");
-    } finally {
-      setSendingId(null);
+      toast.error("❌ Could not send email. Check API logs.");
     }
   };
 
@@ -220,46 +227,50 @@ const SalesDashboardLiveTest = () => {
         <p>No quotes found for "{activeTab}".</p>
       ) : (
         <div className="quote-grid">
-          {filteredQuotes.map((q) => (
-            <div key={q.id} className="quote-card-modern">
-              <div className="quote-card-header">
-                <div>
-                  <h2 className="client-name">{q.client?.name || "Unnamed Client"}</h2>
-                  <p className="quote-meta">
-                    {q.location || "No location"}<br />
-                    {`${q.material || ""} ${q.series || ""} ${q.style || ""}`}
-                  </p>
-                </div>
-                <div className={`status-tag ${normalize(q).signed ? "signed" : normalize(q).declined ? "declined" : normalize(q).viewed ? "viewed" : "sent"}`}>
-                  {normalize(q).declined
-                    ? "Declined"
-                    : normalize(q).signed
-                    ? "Signed"
-                    : normalize(q).viewed
-                    ? "Viewed"
-                    : "Sent"}
-                </div>
-              </div>
-
-              <div className="quote-card-body">
-                <div className="total-display">
-                  <strong>Total:</strong> ${Number(q.total || 0).toLocaleString()}
-                </div>
-                <div className="button-group">
-                  <button onClick={() => handleView(q.id)} className="btn btn-view">View</button>
-                  <button
-                    onClick={() => handleResend(q)}
-                    className="btn btn-resend"
-                    disabled={sendingId === q.id}
+          {filteredQuotes.map((q) => {
+            const s = normalize(q);
+            return (
+              <div key={q.id} className="quote-card-modern">
+                <div className="quote-card-header">
+                  <div>
+                    <h2 className="client-name">{q.client?.name || "Unnamed Client"}</h2>
+                    <p className="quote-meta">
+                      {q.location || "No location"}
+                      <br />
+                      {`${q.material || ""} ${q.series || ""} ${q.style || ""}`}
+                    </p>
+                  </div>
+                  <div
+                    className={`status-tag ${
+                      s.signed ? "signed" : s.declined ? "declined" : s.viewed ? "viewed" : "sent"
+                    }`}
                   >
-                    {sendingId === q.id ? "Sending…" : "Resend"}
-                  </button>
-                  <button onClick={() => handleEdit(q.id)} className="btn btn-edit">✏️ Edit</button>
-                  <button onClick={() => handleDownload(q.id)} className="btn btn-download">Download</button>
+                    {s.declined ? "Declined" : s.signed ? "Signed" : s.viewed ? "Viewed" : "Sent"}
+                  </div>
+                </div>
+
+                <div className="quote-card-body">
+                  <div className="total-display">
+                    <strong>Total:</strong> ${Number(q.total || 0).toLocaleString()}
+                  </div>
+                  <div className="button-group">
+                    <button onClick={() => handleView(q.id)} className="btn btn-view">
+                      View
+                    </button>
+                    <button onClick={() => handleResend(q)} className="btn btn-resend">
+                      Resend
+                    </button>
+                    <button onClick={() => handleEdit(q.id)} className="btn btn-edit">
+                      ✏️ Edit
+                    </button>
+                    <button onClick={() => handleDownload(q.id)} className="btn btn-download">
+                      Download
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -269,6 +280,7 @@ const SalesDashboardLiveTest = () => {
 };
 
 export default SalesDashboardLiveTest;
+
 
 
 
