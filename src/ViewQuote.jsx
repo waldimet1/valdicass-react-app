@@ -1,203 +1,101 @@
 // src/ViewQuote.jsx
 import React, { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { doc, getDoc, updateDoc, Timestamp } from "firebase/firestore";
+import { useLocation } from "react-router-dom";
+import { doc, getDoc } from "firebase/firestore";
+import { PDFDownloadLink } from "@react-pdf/renderer";
+import { toast } from "react-toastify";
+
 import { db } from "./firebaseConfig";
+import QuotePdf from "./pdf/QuotePdf";
+import { renderAndUploadQuotePdf } from "./utils/renderAndUploadQuotePdf"; // <-- single correct import
 
-async function notifyAdmin(event, data) {
-  try {
-    await fetch("https://valdicass-server.vercel.app/notifyQuoteEvent", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ event, ...data }),
-    });
-  } catch (e) {
-    // Avoid breaking UX if email fails
-    console.warn("Notify admin failed:", e);
-  }
-}
+export default function ViewQuote() {
+  const location = useLocation();
+  const quoteId = new URLSearchParams(location.search).get("id");
 
-const ViewQuote = () => {
-  const [searchParams] = useSearchParams();
-  const quoteId = searchParams.get("id");
-  const [quote, setQuote] = useState(null);
+  const [quoteDoc, setQuoteDoc] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [marking, setMarking] = useState(false);
-  const [error, setError] = useState("");
+  const [savingPdf, setSavingPdf] = useState(false);
+  const [progress, setProgress] = useState(0);
 
   useEffect(() => {
-    if (!quoteId) {
-      setError("Missing quote id in the URL.");
-      setLoading(false);
-      return;
-    }
-
-    const fetchAndMarkViewed = async () => {
+    async function load() {
       try {
-        const ref = doc(db, "quotes", quoteId);
-        const snap = await getDoc(ref);
-
-        if (!snap.exists()) {
-          setError("Quote not found.");
+        if (!quoteId) {
           setLoading(false);
           return;
         }
-
-        const data = snap.data();
-        setQuote({ id: snap.id, ...data });
-
-        // Only mark/notify on first view
-        if (data.viewed !== true) {
-          setMarking(true);
-
-          const nextStatus =
-            data.status === "signed" || data.status === "declined"
-              ? data.status
-              : "viewed";
-
-          await updateDoc(ref, {
-            viewed: true,
-            status: nextStatus,
-            "statusTimestamps.viewed":
-              data?.statusTimestamps?.viewed || Timestamp.now(),
-          });
-
-          // fire-and-forget admin notify
-          notifyAdmin("viewed", {
-            quoteId,
-            clientName: data.client?.name || "",
-            clientEmail: data.client?.clientEmail || "",
-            total: data.total || 0,
-          });
-
-          // Update local state
-          setQuote((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  viewed: true,
-                  status: nextStatus,
-                  statusTimestamps: {
-                    ...(prev.statusTimestamps || {}),
-                    viewed:
-                      prev?.statusTimestamps?.viewed || Timestamp.now(),
-                  },
-                }
-              : prev
-          );
+        const snap = await getDoc(doc(db, "quotes", quoteId));
+        if (snap.exists()) {
+          setQuoteDoc({ id: quoteId, ...snap.data() });
+        } else {
+          toast.error("Quote not found");
         }
       } catch (e) {
-        console.error("Failed to load/mark quote as viewed:", e);
-        setError("Failed to load quote.");
+        console.error(e);
+        toast.error("Failed to load quote");
       } finally {
-        setMarking(false);
         setLoading(false);
       }
-    };
-
-    fetchAndMarkViewed();
+    }
+    load();
   }, [quoteId]);
 
-  if (loading) return <div style={{ padding: 24, textAlign: "center" }}>Loading quote…</div>;
-  if (error) return <div style={{ padding: 24, color: "crimson", textAlign: "center" }}>{error}</div>;
-  if (!quote) return <div style={{ padding: 24, textAlign: "center" }}>No quote to display.</div>;
+  const handleSavePdf = async () => {
+    if (!quoteDoc) {
+      toast.error("No quote loaded");
+      return;
+    }
+    try {
+      setSavingPdf(true);
+      setProgress(0);
+      const url = await renderAndUploadQuotePdf(quoteDoc, quoteId, setProgress);
+      setQuoteDoc((prev) => ({ ...prev, pdfUrl: url }));
+      toast.success("PDF saved to quote");
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to save PDF");
+    } finally {
+      setSavingPdf(false);
+    }
+  };
+
+  if (!quoteId) return <div>Missing <code>?id=</code> param in URL.</div>;
+  if (loading) return <div>Loading…</div>;
+  if (!quoteDoc) return <div>Quote not found.</div>;
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
-      <header style={{ marginBottom: 16 }}>
-        <h1 style={{ margin: 0 }}>Quote Preview</h1>
-        <div style={{ color: "#666" }}>
-          Status: <strong>{quote.status || (quote.viewed ? "viewed" : "sent")}</strong>
-          {marking && " • marking viewed…"}
-        </div>
-      </header>
+    <div style={{ padding: 16 }}>
+      <h1>Estimate • {quoteId}</h1>
 
-      <section style={{ marginBottom: 16 }}>
-        <h3>Client</h3>
-        <div><strong>Name:</strong> {quote.client?.name || "—"}</div>
-        <div><strong>Email:</strong> {quote.client?.clientEmail || "—"}</div>
-        <div><strong>Address:</strong> {quote.client?.address || "—"}</div>
-      </section>
+      <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 8 }}>
+        <button onClick={handleSavePdf} disabled={savingPdf}>
+          {savingPdf ? `Saving… ${progress}%` : "Save PDF to Quote"}
+        </button>
 
-      <section style={{ marginBottom: 16 }}>
-        <h3>Totals</h3>
-        <div><strong>Subtotal:</strong> ${Number(quote.subtotal || 0).toLocaleString()}</div>
-        <div><strong>Tax:</strong> ${Number(quote.tax || 0).toLocaleString()}</div>
-        <div style={{ fontWeight: 700 }}>
-          <strong>Total:</strong> ${Number(quote.total || 0).toLocaleString()}
-        </div>
-      </section>
+        <PDFDownloadLink
+          document={<QuotePdf quote={quoteDoc} />}
+          fileName={`Valdicass_Quote_${quoteId}.pdf`}
+        >
+          {({ loading }) => (
+            <button disabled={loading}>
+              {loading ? "Building PDF…" : "Download PDF"}
+            </button>
+          )}
+        </PDFDownloadLink>
 
-      <section>
-        <h3>Rooms & Items</h3>
-        {Array.isArray(quote.rooms) && quote.rooms.length > 0 ? (
-          quote.rooms.map((room, idx) => (
-            <div key={idx} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid #eee" }}>
-              <div style={{ fontWeight: 600 }}>{room.name || `Room ${idx + 1}`}</div>
-              {(room.items || []).map((item) => (
-                <div
-                  key={item.uid}
-                  style={{
-                    padding: "8px 12px",
-                    marginTop: 8,
-                    background: "#fafafa",
-                    borderRadius: 8,
-                    border: "1px solid #eee",
-                  }}
-                >
-                  <div><strong>Type:</strong> {item.type}</div>
-                  <div><strong>Style:</strong> {item.style}</div>
-                  <div><strong>Material/Series:</strong> {item.material} / {item.series}</div>
-                  <div>
-                    <strong>Size:</strong> {item.width} x {item.height}
-                    {item.quantity ? <> • <strong>Qty:</strong> {item.quantity}</> : null}
-                  </div>
-                  <div><strong>Unit Price:</strong> ${Number(item.unitPrice || 0).toLocaleString()}</div>
-                </div>
-              ))}
-            </div>
-          ))
-        ) : (
-          <div>No items.</div>
+        {quoteDoc.pdfUrl && (
+          <a href={quoteDoc.pdfUrl} target="_blank" rel="noreferrer">
+            Open saved PDF
+          </a>
         )}
-      </section>
-
-      {/* Actions */}
-      {!quote.signed && !quote.declined && (
-        <div style={{ marginTop: 20, display: "flex", gap: 12, flexWrap: "wrap" }}>
-          <a
-            href={`/sign?id=${quote.id}`}
-            style={{
-              padding: "10px 16px",
-              background: "#0b5fff",
-              color: "#fff",
-              borderRadius: 8,
-              textDecoration: "none",
-              fontWeight: 600,
-            }}
-          >
-            Agree & Sign
-          </a>
-          <a
-            href={`/decline?id=${quote.id}`}
-            style={{
-              padding: "10px 16px",
-              background: "#dc2626",
-              color: "#fff",
-              borderRadius: 8,
-              textDecoration: "none",
-              fontWeight: 600,
-            }}
-          >
-            Decline Quote
-          </a>
-        </div>
-      )}
+      </div>
     </div>
   );
-};
+}
 
-export default ViewQuote;
+
+
 
 
 

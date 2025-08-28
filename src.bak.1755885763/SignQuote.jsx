@@ -1,12 +1,13 @@
-// src/DeclineQuote.jsx
-import React, { useEffect, useState } from "react";
+// src/SignQuote.jsx
+import React, { useEffect, useRef, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
+import SignatureCanvas from "react-signature-canvas";
 import { doc, getDoc, updateDoc, Timestamp } from "firebase/firestore";
 import { db } from "./firebaseConfig";
 
 async function notifyAdmin(event, data) {
   try {
-    await fetch("/api/notify-quote", {
+    await fetch("https://valdicass-sendquote-api.vercel.app/notifyQuoteEvent", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ event, ...data }),
@@ -16,7 +17,7 @@ async function notifyAdmin(event, data) {
   }
 }
 
-const DeclineQuote = () => {
+const SignQuote = () => {
   const [searchParams] = useSearchParams();
   const quoteId = searchParams.get("id");
   const navigate = useNavigate();
@@ -27,7 +28,7 @@ const DeclineQuote = () => {
   const [error, setError] = useState("");
 
   const [fullName, setFullName] = useState("");
-  const [reason, setReason] = useState("");
+  const sigRef = useRef(null);
 
   useEffect(() => {
     const load = async () => {
@@ -55,40 +56,46 @@ const DeclineQuote = () => {
     load();
   }, [quoteId]);
 
+  const clearSignature = () => sigRef.current?.clear();
+
   const handleSubmit = async () => {
     if (!fullName.trim()) {
       alert("Please enter your full name.");
       return;
     }
-    if (!window.confirm("Are you sure you want to decline this quote?")) return;
+    if (!sigRef.current || sigRef.current.isEmpty()) {
+      alert("Please draw your signature.");
+      return;
+    }
 
     try {
       setSaving(true);
+      const dataUrl = sigRef.current.getTrimmedCanvas().toDataURL("image/png");
       const ref = doc(db, "quotes", quoteId);
+
       await updateDoc(ref, {
-        declined: true,
-        status: "declined",
-        "statusTimestamps.declined": Timestamp.now(),
-        declinedBy: fullName.trim(),
-        declinedAt: Timestamp.now(),
-        declinedReason: reason.trim() || null,
+        signed: true,
+        status: "signed",
+        "statusTimestamps.signed": Timestamp.now(),
+        signedBy: fullName.trim(),
+        signedAt: Timestamp.now(),
+        signatureDataUrl: dataUrl,
       });
 
       // notify admin
-      notifyAdmin("declined", {
+      notifyAdmin("signed", {
         quoteId,
         clientName: quote?.client?.name || "",
         clientEmail: quote?.client?.clientEmail || "",
         total: quote?.total || 0,
-        declinedBy: fullName.trim(),
-        declinedReason: reason.trim() || "",
+        signedBy: fullName.trim(),
       });
 
-      alert("✅ This quote has been marked as declined.");
+      alert("✅ Thank you! Your quote has been signed.");
       navigate(`/view-quote?id=${quoteId}`);
     } catch (e) {
       console.error(e);
-      alert("❌ Failed to decline the quote. Please try again.");
+      alert("❌ Failed to submit signature. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -102,17 +109,16 @@ const DeclineQuote = () => {
     return (
       <div style={{ maxWidth: 900, margin: "0 auto", padding: 24, textAlign: "center" }}>
         <h2>Already Signed</h2>
-        <p>This quote has already been signed and cannot be declined.</p>
+        <p>This quote has already been signed by {quote.signedBy || "the client"}.</p>
         <button onClick={() => navigate(`/view-quote?id=${quoteId}`)}>Back to Quote</button>
       </div>
     );
   }
-
   if (quote.declined) {
     return (
       <div style={{ maxWidth: 900, margin: "0 auto", padding: 24, textAlign: "center" }}>
-        <h2>Already Declined</h2>
-        <p>This quote was already declined by {quote.declinedBy || "the client"}.</p>
+        <h2>Quote Declined</h2>
+        <p>This quote has been marked as declined and cannot be signed.</p>
         <button onClick={() => navigate(`/view-quote?id=${quoteId}`)}>Back to Quote</button>
       </div>
     );
@@ -120,7 +126,7 @@ const DeclineQuote = () => {
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
-      <h1 style={{ marginBottom: 16 }}>Decline Quote</h1>
+      <h1 style={{ marginBottom: 16 }}>Agree & Sign</h1>
 
       <section style={{ marginBottom: 16 }}>
         <div><strong>Client:</strong> {quote.client?.name || "—"}</div>
@@ -128,7 +134,7 @@ const DeclineQuote = () => {
       </section>
 
       <label style={{ display: "block", marginBottom: 8 }}>
-        Your Full Name
+        Full Name (typing your name is part of your signature)
       </label>
       <input
         value={fullName}
@@ -143,37 +149,40 @@ const DeclineQuote = () => {
         }}
       />
 
-      <label style={{ display: "block", marginBottom: 8 }}>
-        Reason for declining (optional)
-      </label>
-      <textarea
-        value={reason}
-        onChange={(e) => setReason(e.target.value)}
-        placeholder="e.g., going in a different direction, price too high, timing, etc."
-        rows={4}
+      <div style={{ marginBottom: 8 }}>Draw your signature below:</div>
+      <div
         style={{
-          width: "100%",
-          padding: 10,
+          background: "#fff",
+          border: "1px solid #ccc",
+          borderRadius: 8,
+          padding: 8,
           marginBottom: 12,
-          borderRadius: 6,
-          border: "1px solid #ddd",
-          resize: "vertical",
         }}
-      />
+      >
+        <SignatureCanvas
+          ref={sigRef}
+          penColor="#111"
+          canvasProps={{ width: 850, height: 200, style: { width: "100%", height: 200 } }}
+          backgroundColor="#fff"
+        />
+      </div>
 
-      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <button onClick={clearSignature}>Clear</button>
         <button onClick={() => navigate(`/view-quote?id=${quoteId}`)}>Back</button>
-        <button
-          onClick={handleSubmit}
-          disabled={saving}
-          style={{ marginLeft: "auto", background: "#dc2626", color: "#fff", padding: "10px 16px", borderRadius: 8, border: 0, fontWeight: 600 }}
-        >
-          {saving ? "Declining…" : "Confirm Decline"}
+        <button onClick={handleSubmit} disabled={saving} style={{ marginLeft: "auto" }}>
+          {saving ? "Saving…" : "Agree & Sign"}
         </button>
+      </div>
+
+      <div style={{ fontSize: 12, color: "#666" }}>
+        By clicking “Agree & Sign”, you agree that this electronic signature is the legal equivalent
+        of your manual signature.
       </div>
     </div>
   );
 };
 
-export default DeclineQuote;
+export default SignQuote;
+
 

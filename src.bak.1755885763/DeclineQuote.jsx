@@ -6,7 +6,7 @@ import { db } from "./firebaseConfig";
 
 async function notifyAdmin(event, data) {
   try {
-    await fetch("/api/notify-quote", {
+    await fetch("https://valdicass-sendquote-api.vercel.app/notifyQuoteEvent", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ event, ...data }),

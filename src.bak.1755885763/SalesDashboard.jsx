@@ -11,7 +11,7 @@ import "./SalesDashboard.css";
 const ADMIN_UID = "REuTGQ98bAM0riY9xidS8fW6obl2"; // same as App.jsx
 
 // 🔗 Point the dashboard to your email API on Vercel
-/* API_BASE removed; use app proxy */
+const API_BASE = "https://valdicass-sendquote-api.vercel.app";
 
 const SalesDashboardLiveTest = () => {
   const [quotes, setQuotes] = useState([]);
@@ -169,7 +169,7 @@ const SalesDashboardLiveTest = () => {
     const shareUrl = `https://app.valdicass.com/view-quote?id=${quote.id}`;
 
     try {
-      const res = await fetch(`/api/send-quote`, {
+      const res = await fetch(`${API_BASE}/api/sendQuoteEmail`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

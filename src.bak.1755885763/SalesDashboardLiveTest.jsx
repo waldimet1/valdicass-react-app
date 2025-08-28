@@ -3,7 +3,7 @@ import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
 import { auth, db } from "./firebaseConfig";
 import { signOut } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
-import QuoteStatusPill from "@/components/quotes/QuoteStatusPill";
+
 const SalesDashboardLiveTest = ({ user, setUser }) => {
   const [quotes, setQuotes] = useState([]);
   const [activeFilter, setActiveFilter] = useState("All");
@@ -79,10 +79,6 @@ const SalesDashboardLiveTest = ({ user, setUser }) => {
           </button>
         ))}
       </div>
-<div className="quote-card">
-  {/* existing header / client / total, etc. */}
-  <QuoteStatusPill quoteId={quote.id} />
-</div>
 
       {/* Quote Cards */}
       <div>

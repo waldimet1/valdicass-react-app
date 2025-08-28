@@ -39,7 +39,7 @@ const MyQuotes = () => {
     try {
       console.log(`🚩 Sending quote ${quoteId} to ${clientEmail}`);
       const response = await axios.post(
-        "/api/send-quote",
+        "https://valdicass-backend.onrender.com/sendQuoteEmail",
         {
           quoteId,
           clientEmail,
