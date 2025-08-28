@@ -1,15 +1,15 @@
 // src/QuotesPage.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { auth, db } from "@/services/firebaseConfig";
+import { auth, db } from "./firebaseConfig"; // unified import
 import { onAuthStateChanged } from "firebase/auth";
-import { collection, onSnapshot } from "firebase/firestore";
-import QuoteStatusPill from "@/components/quotes/QuoteStatusPill";
+import { collection, onSnapshot, doc, getDoc } from "firebase/firestore";
+import QuoteStatusPill from "/components/quotes/QuoteStatusPill";
+import { renderAndUploadQuotePdf } from "./utils/renderAndUploadQuotePdf";
+import { toast } from "react-toastify";
 
 const VALID_FILTERS = ["all", "sent", "viewed", "signed", "declined"];
-
-// Admin UIDs (add more if needed)
-const ADMIN_UIDS = ["REuTGQ98bAM0riY9xidS8fW6obl2"];
+const ADMIN_UIDS = ["REuTGQ98bAM0riY9xidS8fW6obl2"]; // Admin UIDs
 
 function fmt(ts) {
   try {
@@ -30,16 +30,17 @@ export default function QuotesPage() {
   const [quotes, setQuotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  const [savingId, setSavingId] = useState(null); // track per-row save
 
   const isAdmin = !!user && ADMIN_UIDS.includes(user.uid);
 
-  // guard bad URLs like /quotes/foo
+  // Guard bad URLs like /quotes/foo
   useEffect(() => {
     if (!VALID_FILTERS.includes(filter)) navigate("/quotes/all", { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
 
-  // keep auth state in sync
+  // Keep auth state in sync
   useEffect(() => {
     if (!auth) return;
     const off = onAuthStateChanged(auth, setUser);
@@ -104,6 +105,27 @@ export default function QuotesPage() {
 
   const baseUrl = window.location.origin.replace(/\/$/, "");
 
+  // Save PDF for a single row
+  async function handleSavePdfFor(id) {
+    try {
+      setSavingId(id);
+      const snap = await getDoc(doc(db, "quotes", id));
+      if (!snap.exists()) {
+        toast.error("Quote not found");
+        return;
+      }
+      const quote = { id, ...snap.data() };
+      const url = await renderAndUploadQuotePdf(quote, id); // uploads to quotes/{id}/quote.pdf
+      setQuotes((prev) => prev.map((q) => (q.id === id ? { ...q, pdfUrl: url } : q)));
+      toast.success("PDF saved");
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to save PDF");
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   if (!user) {
     return (
       <div style={{ padding: 24, textAlign: "center" }}>
@@ -157,6 +179,7 @@ export default function QuotesPage() {
       </header>
 
       {err && <div style={{ color: "crimson", marginBottom: 12 }}>{err}</div>}
+
       {loading ? (
         <div>Loading…</div>
       ) : quotes.length === 0 ? (
@@ -187,6 +210,24 @@ export default function QuotesPage() {
                       <a href={`${baseUrl}/view-quote?id=${q.id}`} target="_blank" rel="noreferrer" style={btnLink}>
                         Open
                       </a>
+
+                      {/* NEW: Save PDF button */}
+                      <button
+                        onClick={() => handleSavePdfFor(q.id)}
+                        disabled={savingId === q.id}
+                        style={btn}
+                        title="Render & upload PDF"
+                      >
+                        {savingId === q.id ? "Saving…" : "Save PDF"}
+                      </button>
+
+                      {/* NEW: Open PDF link if exists */}
+                      {q.pdfUrl && (
+                        <a href={q.pdfUrl} target="_blank" rel="noreferrer" style={btnLink}>
+                          Open PDF
+                        </a>
+                      )}
+
                       <button
                         onClick={() => navigator.clipboard.writeText(`${baseUrl}/view-quote?id=${q.id}`)}
                         style={btn}
@@ -194,6 +235,7 @@ export default function QuotesPage() {
                       >
                         Copy Link
                       </button>
+
                       {!(q.signed || q.declined || q.status === "signed" || q.status === "declined") && (
                         <>
                           <a href={`${baseUrl}/sign?id=${q.id}`} target="_blank" rel="noreferrer" style={btnLink}>
@@ -228,6 +270,7 @@ const btn = {
 };
 const btnLink = { ...btn, textDecoration: "none", display: "inline-block" };
 const btnLinkRed = { ...btnLink, borderColor: "#fecaca", background: "#fee2e2" };
+
 
 
 

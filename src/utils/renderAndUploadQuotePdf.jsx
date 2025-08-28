@@ -1,4 +1,4 @@
-// src/utils/renderAndUploadQuotePdf.js
+// src/utils/renderAndUploadQuotePdf.jsx
 import React from "react";
 import { pdf } from "@react-pdf/renderer";
 import QuotePdf from "../pdf/QuotePdf";
@@ -12,12 +12,11 @@ import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebaseConfig";
 
 /**
- * Renders the QuotePdf component to a Blob, uploads to
- * Storage at quotes/{quoteId}/quote.pdf, retrieves the public URL,
- * and writes { pdfUrl, pdfUpdatedAt } back to Firestore.
+ * Render <QuotePdf/> -> Blob, upload to Storage at quotes/{quoteId}/quote.pdf,
+ * then write { pdfUrl, pdfUpdatedAt } back to Firestore.
  *
- * @param {object} quoteDoc
- * @param {string} quoteId
+ * @param {object} quoteDoc Firestore quote object (must have createdBy on doc)
+ * @param {string} quoteId  Firestore doc id
  * @param {(n:number)=>void} [onProgress]
  * @returns {Promise<string>} download URL
  */
@@ -25,15 +24,12 @@ export async function renderAndUploadQuotePdf(quoteDoc, quoteId, onProgress) {
   if (!quoteId) throw new Error("renderAndUploadQuotePdf: missing quoteId");
   if (!quoteDoc) throw new Error("renderAndUploadQuotePdf: missing quoteDoc");
 
-  // 1) Render PDF -> Blob (client-side) WITHOUT JSX in a .js file
-  const element = React.createElement(QuotePdf, {
-    quote: { id: quoteId, ...quoteDoc },
-  });
-  const blob = await pdf(element).toBlob();
+  // 1) Render PDF -> Blob
+  const blob = await pdf(<QuotePdf quote={{ id: quoteId, ...quoteDoc }} />).toBlob();
 
-  // 2) Upload to Storage with progress tracking
+  // 2) Upload to Storage (must match rules)
   const storage = getStorage();
-  const filePath = `quotes/${quoteId}/quote.pdf`; // must match Storage rules
+  const filePath = `quotes/${quoteId}/quote.pdf`;
   const pdfRef = ref(storage, filePath);
   const metadata = { contentType: "application/pdf" };
 
