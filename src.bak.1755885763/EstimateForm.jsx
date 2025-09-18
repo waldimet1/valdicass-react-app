@@ -287,7 +287,8 @@ const sendQuoteEmail = async () => {
   </div>
 )}
 
-        <h1 className="form-title mb-4">Estimate Form</h1>
+        <h1 className="form-title mb-2
+">Estimate Form</h1>
 
         {/* Client Info */}
         <input name="name" value={client.name} onChange={handleClientChange} placeholder="Client Name" />

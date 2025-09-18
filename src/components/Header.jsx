@@ -3,14 +3,14 @@ import React, { forwardRef } from "react";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebaseConfig";
 import { useNavigate } from "react-router-dom";
-
+import NotificationBell from "./components/NotificationBell";
 const Header = forwardRef((props, ref) => {
   const navigate = useNavigate();
 
   const handleLogout = () => {
     signOut(auth).then(() => navigate("/login"));
   };
-
+{user && <NotificationBell user={user} />}
   return (
     <header ref={ref} style={styles.header}>
       <div style={styles.container}>

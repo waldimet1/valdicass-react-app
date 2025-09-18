@@ -1,31 +1,38 @@
+// src/components/SaveQuotePdfButton.jsx
 import React, { useState } from "react";
-import { renderAndUploadQuotePdf } from './utils/renderAndUploadQuotePdf.jsx';
- 
 
-/**
- * Saves a PDF to Storage at quotes/{quoteId}/quote.pdf and writes pdfUrl to Firestore.
- * Renders nothing if quote or quoteId are missing.
- */
-export default function SaveQuotePdfButton({ quote, quoteId, onSaved }) {
-  const [saving, setSaving] = useState(false);
-  const [progress, setProgress] = useState(0);
+export default function SaveQuotePdfButton({ quoteId, onSaved }) {
+  const [busy, setBusy] = useState(false);
 
-  if (!quote || !quoteId) return null; // prevents ReferenceError & useless button
-
-  async function handleClick() {
+  const run = async () => {
     try {
-      setSaving(true);
-      setProgress(0);
-      const url = await renderAndUploadQuotePdf(quote, quoteId, setProgress);
-      onSaved?.(url);
+      setBusy(true);
+      const res = await fetch("/api/save-quote-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quoteId }),
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error || "Unknown error");
+      onSaved?.(json.url);
+      alert("✅ PDF saved: " + json.url);
+      window.open(json.url, "_blank");
+    } catch (e) {
+      alert("❌ Failed to save PDF\n" + e.message);
+      console.error(e);
     } finally {
-      setSaving(false);
+      setBusy(false);
     }
-  }
+  };
 
   return (
-    <button onClick={handleClick} disabled={saving} title="Save PDF to quote">
-      {saving ? `Saving… ${progress}%` : "Save PDF to Quote"}
+    <button onClick={run} disabled={busy} className="bg-blue-600 text-white px-4 py-2 rounded">
+      {busy ? "Saving…" : "Save PDF"}
     </button>
   );
 }
+
+
+
+
+

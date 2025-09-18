@@ -1,36 +1,61 @@
 // src/EstimateForm.jsx
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+
 import {
   collection,
   addDoc,
   updateDoc,
   doc,
   serverTimestamp,
+  getDoc,
+  runTransaction,
 } from "firebase/firestore";
-import { auth, db } from "@/services/firebaseConfig";
+import { auth, db } from "./firebaseConfig";
 
 import LineItem from "./LineItem";
 import valdicassLogo from "./assets/valdicass-logo.png";
 import greenskyLogo from "./assets/greensky-logo.jpeg";
 import "./EstimateForm.css";
 import usePricing from "./hooks/usePricing";
-import { PDFDownloadLink } from '@react-pdf/renderer';
-import QuotePdf from './pdf/QuotePdf';
 import SaveQuotePdfButton from "./components/SaveQuotePdfButton";
-import DownloadQuotePdfButton from "./components/DownloadQuotePdfButton";
-<PDFDownloadLink
-  document={<QuotePdf quote={quoteDoc} />}
-  fileName={`Valdicass_Quote_${quoteId}.pdf`}
->
-  {({ loading }) => (
-    <button disabled={loading}>
-      {loading ? 'Building PDF…' : 'Download PDF'}
-    </button>
-  )}
-</PDFDownloadLink>
-// Helpers inlined to avoid path issues during build
+import SalesRepEditor from "./components/SalesRepEditor";
+
+/* ----------------------- helpers (single definitions) ---------------------- */
+
+function creatorFromUser(user) {
+  return {
+    createdBy: user?.uid || null,
+    createdByName: user?.displayName || user?.email || "Unknown",
+    createdByEmail: user?.email || null,
+  };
+}
+
+// Get default “Prepared by” from auth + optional users/<uid> profile
+async function getDefaultPreparedBy() {
+  const u = auth.currentUser;
+  if (!u) return { uid: "", name: "Sales Representative", email: "", phone: "" };
+
+  let name = u.displayName || "";
+  let phone = "";
+
+  try {
+    const prof = await getDoc(doc(db, "users", u.uid));
+    if (prof.exists()) {
+      const p = prof.data() || {};
+      phone = p.phone || p.phoneNumber || "";
+      if (!name) {
+        name = p.name || p.fullName || [p.firstName, p.lastName].filter(Boolean).join(" ");
+      }
+    }
+  } catch {
+    // ignore profile read errors
+  }
+
+  return { uid: u.uid, name: name || "Sales Representative", email: u.email || "", phone };
+}
+
 function makeQuoteDisplayName({ clientName, city, createdAt, total }) {
   const who = (clientName || "Customer").trim();
   const when =
@@ -42,75 +67,80 @@ function makeQuoteDisplayName({ clientName, city, createdAt, total }) {
   const whenStr = when.toLocaleDateString(undefined, { month: "short", day: "2-digit" });
   const loc = city ? ` • ${city}` : "";
   const money =
-    typeof total === "number" && Number.isFinite(total)
-      ? ` — $${Number(total).toLocaleString()}`
-      : "";
+    Number.isFinite(Number(total)) ? ` — $${Number(total).toLocaleString()}` : "";
   return `${who}${loc} — ${whenStr}${money}`;
 }
 
-function creatorFromUser(user) {
-  return {
-    createdBy: user?.uid || null,
-    createdByName: user?.displayName || user?.email || "Unknown",
-    createdByEmail: user?.email || null,
-  };
-}
+const fileSafe = (s = "") => s.replace(/[\\/:*?"<>|]+/g, "").trim().slice(0, 80);
 
-const EstimateForm = () => {
+/* -------------------------------- component -------------------------------- */
+
+export default function EstimateForm() {
+  const navigate = useNavigate();
+  const { pricingMap: pricing } = usePricing();
+
+  const [title, setTitle] = useState("");
   const [client, setClient] = useState({ name: "", address: "", clientEmail: "" });
   const [rooms, setRooms] = useState([]);
   const [subtotal, setSubtotal] = useState(0);
   const [tax, setTax] = useState(0);
   const [total, setTotal] = useState(0);
 
+  const [preparedBy, setPreparedBy] = useState({ uid: "", name: "", email: "", phone: "" });
+
   const [isCheckout, setIsCheckout] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
   const [showShare, setShowShare] = useState(false);
   const [sending, setSending] = useState(false);
 
-  const { pricingMap: pricing } = usePricing();
-  const navigate = useNavigate();
-  const itemRefsMap = useRef({}); // refs per room
+  const itemRefsMap = useRef({}); // per-room item refs
+
+  useEffect(() => {
+    (async () => setPreparedBy(await getDefaultPreparedBy()))();
+  }, []);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
   useEffect(() => {
-    // Scroll to last added item for each room
-    rooms.forEach((room, roomIndex) => {
+    // Scroll to last added item per room
+    rooms.forEach((_, roomIndex) => {
       const itemRefs = itemRefsMap.current[roomIndex];
-      if (itemRefs && itemRefs.length > 0) {
-        const lastRef = itemRefs[itemRefs.length - 1];
-        lastRef?.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (itemRefs?.length) {
+        itemRefs[itemRefs.length - 1]?.scrollIntoView({ behavior: "smooth", block: "start" });
       }
     });
   }, [rooms]);
-
-  const getPrice = (pricingMap, item) => {
-    const styleData = pricingMap?.[item.material]?.[item.series]?.[item.style];
-    if (typeof styleData === "number") return styleData;
-    if (styleData?.Standard) return styleData.Standard;
-    return 0;
-  };
 
   const handleClientChange = (e) => {
     const { name, value } = e.target;
     setClient((prev) => ({ ...prev, [name]: value }));
   };
 
-  const addRoom = () => setRooms([...rooms, { name: "", items: [] }]);
+  const addRoom = () => setRooms((r) => [...r, { name: "", items: [] }]);
 
   const updateRoomName = (index, name) => {
-    const updated = [...rooms];
-    updated[index].name = name;
-    setRooms(updated);
+    setRooms((r) => {
+      const copy = [...r];
+      copy[index].name = name;
+      return copy;
+    });
   };
 
   const removeRoom = (index) => {
-    const updated = [...rooms];
-    updated.splice(index, 1);
-    setRooms(updated);
+    setRooms((r) => {
+      const copy = [...r];
+      copy.splice(index, 1);
+      return copy;
+    });
+  };
+
+  const getPrice = (pricingMap, item) => {
+    const styleData = pricingMap?.[item.material]?.[item.series]?.[item.style];
+    if (typeof styleData === "number") return styleData;
+    if (styleData?.Standard) return styleData.Standard;
+    return 0;
   };
 
   const addLineItemToRoom = (roomIndex) => {
@@ -147,32 +177,40 @@ const EstimateForm = () => {
       notes: "",
     };
 
-    const updated = [...rooms];
-    updated[roomIndex].items.push(newItem);
-    setRooms(updated);
+    setRooms((r) => {
+      const copy = [...r];
+      copy[roomIndex].items.push(newItem);
+      return copy;
+    });
   };
 
   const updateLineItem = (roomIndex, itemIndex, updatedItem) => {
     updatedItem.unitPrice = getPrice(pricing, updatedItem);
-    const updated = [...rooms];
-    updated[roomIndex].items[itemIndex] = updatedItem;
-    setRooms(updated);
+    setRooms((r) => {
+      const copy = [...r];
+      copy[roomIndex].items[itemIndex] = updatedItem;
+      return copy;
+    });
   };
 
   const removeLineItem = (roomIndex, itemIndex) => {
-    const updated = [...rooms];
-    updated[roomIndex].items.splice(itemIndex, 1);
-    setRooms(updated);
+    setRooms((r) => {
+      const copy = [...r];
+      copy[roomIndex].items.splice(itemIndex, 1);
+      return copy;
+    });
   };
 
   const handleDragEnd = (result, roomIndex) => {
     if (!result.destination) return;
-    const updated = [...rooms];
-    const items = [...updated[roomIndex].items];
-    const [moved] = items.splice(result.source.index, 1);
-    items.splice(result.destination.index, 0, moved);
-    updated[roomIndex].items = items;
-    setRooms(updated);
+    setRooms((r) => {
+      const copy = [...r];
+      const items = [...copy[roomIndex].items];
+      const [moved] = items.splice(result.source.index, 1);
+      items.splice(result.destination.index, 0, moved);
+      copy[roomIndex].items = items;
+      return copy;
+    });
   };
 
   const calculateTotal = () => {
@@ -194,7 +232,29 @@ const EstimateForm = () => {
     calculateTotal();
   }, [rooms]);
 
-  // Save the quote and generate a share link
+  // for client preview while draft
+  const draftQuote = useMemo(
+    () => ({
+      id: "DRAFT",
+      client: { ...client },
+      rooms,
+      subtotal: Number(subtotal || 0),
+      tax: Number(tax || 0),
+      total: Number(total || 0),
+      createdAt: new Date(),
+    }),
+    [client, rooms, subtotal, tax, total]
+  );
+
+  const extractQuoteId = (url) => {
+    try {
+      const u = new URL(url);
+      return u.searchParams.get("id") || "";
+    } catch {
+      return "";
+    }
+  };
+
   const saveQuoteToFirestore = async () => {
     setIsCheckout(true);
 
@@ -214,50 +274,43 @@ const EstimateForm = () => {
       const creator = creatorFromUser(user);
       const now = serverTimestamp();
 
-      const displayName = makeQuoteDisplayName({
-        clientName: client.name,
-        city: undefined, // optional
-        total: Number(total || 0),
-      });
+      const displayName =
+        (title || "").trim() ||
+        makeQuoteDisplayName({
+          clientName: client.name,
+          city: undefined,
+          total: Number(total || 0),
+        });
 
       const quote = {
-        // 🏷️ Friendly label
         displayName,
-
-        // 🧑‍💼 Ownership (new + legacy for back-compat)
-        ...creator, // createdBy, createdByName, createdByEmail
+        ...creator,
         userId: user.uid,
         userEmail: user.email,
 
-        // 📦 Payload
-        client: {
-          name: client.name,
-          address: client.address,
-          clientEmail: client.clientEmail,
-        },
+        client: { ...client },
         rooms: Array.isArray(rooms) ? rooms : [],
         subtotal: Number(subtotal || 0),
         tax: Number(tax || 0),
         total: Number(total || 0),
-
-        // ⏱️ Timestamps & status
         createdAt: now,
         date: now,
-        status: "draft", // flips to "sent" when email is sent
+
+        status: "draft",
         viewed: false,
         signed: false,
         declined: false,
-        statusTimestamps: {
-          sent: null,
-          viewed: null,
-          signed: null,
-          declined: null,
-        },
+        statusTimestamps: { sent: null, viewed: null, signed: null, declined: null },
+
+        // Rep info saved on the quote
+        preparedBy,
+        preparedByName: preparedBy.name || "",
+        preparedByEmail: preparedBy.email || "",
+        preparedByPhone: preparedBy.phone || "",
       };
 
       const docRef = await addDoc(collection(db, "quotes"), quote);
 
-      // Build client link (prod or local)
       const base = window.location.origin.includes("localhost")
         ? "http://localhost:3000"
         : "https://app.valdicass.com";
@@ -274,17 +327,6 @@ const EstimateForm = () => {
     }
   };
 
-  // pull “id=XXXX” out of https://app.valdicass.com/view-quote?id=XXXX
-  const extractQuoteId = (url) => {
-    try {
-      const u = new URL(url);
-      return u.searchParams.get("id") || "";
-    } catch {
-      return "";
-    }
-  };
-
-  // Send email to client using your API, then mark status=sent
   const sendQuoteEmail = async () => {
     const quoteId = extractQuoteId(shareUrl);
     const payload = {
@@ -294,6 +336,7 @@ const EstimateForm = () => {
       total: Number(total),
       shareUrl,
       createdBy: auth?.currentUser?.uid || "WEB",
+      displayName: (title || "").trim(),
     };
 
     const missing = [];
@@ -303,7 +346,6 @@ const EstimateForm = () => {
     if (!Number.isFinite(payload.total)) missing.push("total");
     if (!payload.shareUrl) missing.push("shareUrl");
     if (missing.length) {
-      console.error("send-quote missing:", missing, payload);
       alert(`Missing fields: ${missing.join(", ")}`);
       return;
     }
@@ -317,12 +359,10 @@ const EstimateForm = () => {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json?.ok) {
-        console.error("send-quote failed", res.status, json);
         throw new Error(json?.error || `Failed with ${res.status}`);
       }
       alert("✅ Email sent to client!");
 
-      // mark Firestore as sent
       try {
         await updateDoc(doc(db, "quotes", quoteId), {
           status: "sent",
@@ -345,10 +385,49 @@ const EstimateForm = () => {
     }
   };
 
+  const savedQuoteId = useMemo(() => extractQuoteId(shareUrl), [shareUrl]);
+
+  /* ---------------------------------- UI ---------------------------------- */
+
   return (
     <div className="px-4 py-6 bg-gray-100">
       <div className="estimate-container max-w-5xl mx-auto bg-white p-6 rounded shadow-md">
         <img src={valdicassLogo} alt="Valdicass Logo" className="valdicass-header-logo" />
+
+       {/* Sales Representative */}
+<div className="mb-4 border rounded-xl p-4">
+  <div className="text-sm font-semibold text-slate-700 mb-2">Sales Representative</div>
+
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+    <label className="text-xs font-medium text-slate-500">
+      Email
+      <input
+        type="email"
+        name="preparedByEmail"
+        className="mt-1 w-full h-10 rounded-lg border border-slate-200 px-3"
+        value={preparedBy.email ?? ""}
+        onChange={(e) => setPreparedBy((p) => ({ ...p, email: e.target.value }))}
+        placeholder="name@valdicass.com"
+        title="Sales rep email"
+        autoComplete="email"
+      />
+    </label>
+
+    <label className="text-xs font-medium text-slate-500">
+      Phone
+      <input
+        name="preparedByPhone"
+        className="mt-1 w-full h-10 rounded-lg border border-slate-200 px-3"
+        value={preparedBy.phone ?? ""}
+        onChange={(e) => setPreparedBy((p) => ({ ...p, phone: e.target.value }))}
+        placeholder="708-255-5231"
+        title="Sales rep phone"
+        autoComplete="tel"
+      />
+    </label>
+  </div>
+</div>
+
 
         {showShare && (
           <div
@@ -393,6 +472,15 @@ const EstimateForm = () => {
               >
                 {sending ? "Sending…" : "Send to Client"}
               </button>
+
+              {savedQuoteId && (
+                <SaveQuotePdfButton
+                  quote={{ id: savedQuoteId, ...draftQuote }}
+                  quoteId={savedQuoteId}
+                  onSaved={(url) => console.log("Saved PDF URL:", url)}
+                />
+              )}
+
               <button onClick={() => navigate("/dashboard")} className="bg-black text-white px-4 py-2 rounded">
                 Go to Dashboard
               </button>
@@ -401,6 +489,17 @@ const EstimateForm = () => {
         )}
 
         <h1 className="form-title mb-4">Estimate Form</h1>
+
+        <div className="mb-4">
+          <label className="block text-sm text-gray-600 mb-1">Estimate Name</label>
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="e.g., Skura Residence — Window Replacement"
+            className="w-full"
+          />
+          <div className="text-xs text-gray-400 mt-1">Shown to the client and used for downloads.</div>
+        </div>
 
         {/* Client Info */}
         <input name="name" value={client.name} onChange={handleClientChange} placeholder="Client Name" />
@@ -415,6 +514,7 @@ const EstimateForm = () => {
 
         {/* Rooms */}
         {rooms.map((room, roomIndex) => {
+          itemRefsMap.current[roomIndex] = itemRefsMap.current[roomIndex] || [];
           const itemRefs = (itemRefsMap.current[roomIndex] = []);
 
           return (
@@ -433,24 +533,22 @@ const EstimateForm = () => {
                     <div {...provided.droppableProps} ref={provided.innerRef}>
                       {room.items.map((item, itemIndex) => (
                         <Draggable key={item.uid} draggableId={item.uid} index={itemIndex}>
-                          {(provided) => (
+                          {(provided2) => (
                             <div
                               ref={(el) => {
-                                if (!itemRefsMap.current[roomIndex]) {
-                                  itemRefsMap.current[roomIndex] = [];
-                                }
+                                if (!itemRefsMap.current[roomIndex]) itemRefsMap.current[roomIndex] = [];
                                 itemRefsMap.current[roomIndex][itemIndex] = el;
-                                provided.innerRef(el);
+                                provided2.innerRef(el);
                               }}
-                              {...provided.draggableProps}
-                              {...provided.dragHandleProps}
+                              {...provided2.draggableProps}
+                              {...provided2.dragHandleProps}
                             >
                               <LineItem
                                 item={item}
                                 index={itemIndex}
                                 pricing={pricing}
-                                updateLineItem={(index, updatedItem) =>
-                                  updateLineItem(roomIndex, index, updatedItem)
+                                updateLineItem={(idx, updatedItem) =>
+                                  updateLineItem(roomIndex, idx, updatedItem)
                                 }
                                 removeLineItem={() => removeLineItem(roomIndex, itemIndex)}
                               />
@@ -462,10 +560,13 @@ const EstimateForm = () => {
                     </div>
                   )}
                 </Droppable>
-              </DragDropContext> {/* ✅ MISSING CLOSE TAG ADDED */}
+              </DragDropContext>
 
               <div className="flex justify-between mt-4">
-                <button onClick={() => addLineItemToRoom(roomIndex)} className="bg-blue-600 text-white px-4 py-2 rounded">
+                <button
+                  onClick={() => addLineItemToRoom(roomIndex)}
+                  className="bg-blue-600 text-white px-4 py-2 rounded"
+                >
                   + Add Item to {room.name || "Room"}
                 </button>
                 <button onClick={() => removeRoom(roomIndex)} className="text-red-500">
@@ -495,9 +596,11 @@ const EstimateForm = () => {
       </div>
     </div>
   );
-};
+}
 
-export default EstimateForm;
+
+
+
 
 
 

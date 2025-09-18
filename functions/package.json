@@ -1,0 +1,1 @@
+{"name":"valdicass-functions","private":true,"engines":{"node":"20"},"scripts":{"lint":"echo \"skip lint\"","build":"echo \"no build\""},"dependencies":{"firebase-admin":"^12.7.0","firebase-functions":"^6.4.0"}}

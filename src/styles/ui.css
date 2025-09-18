@@ -1,0 +1,123 @@
+:root {
+  --rail-hover: #2C84E0;
+  --rail-hover-fg: #fff;
+}
+
+.rail-btn:hover,
+.rail-btn:focus-visible {
+  background: var(--rail-hover);
+  border-color: var(--rail-hover);
+  color: var(--rail-hover-fg);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(44,132,224,0.25);
+  outline: none;
+}
+/* === Global blueprint background === */
+:root{
+  /* Overlay tints so UI remains readable */
+  --bg-overlay-light: rgba(255,255,255,0.88);
+  --bg-overlay-dark:  rgba(11,18,32,0.90);
+
+  /* Path is relative to ui.css location */
+  --blueprint-url: url("../assets/blueprint-bg.png");
+}
+
+/* Ensure the page can show the full background */
+html, body, #root { min-height: 100%; }
+
+body{
+  /* keep your existing font/color declarations if you have them elsewhere */
+  margin: 0;
+
+  /* Image + soft overlay */
+  background-image:
+    linear-gradient(var(--bg-overlay-light), var(--bg-overlay-light)),
+    var(--blueprint-url) !important; /* ensure we win over page-level body backgrounds */
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed; /* nice on desktop */
+}
+
+/* Dark theme: same image, darker overlay */
+.vd-dark body{
+  background-image:
+    linear-gradient(var(--bg-overlay-dark), var(--bg-overlay-dark)),
+    var(--blueprint-url) !important;
+}
+
+/* Mobile Safari / touch devices: avoid fixed attachment jank */
+@media (hover: none) and (pointer: coarse) {
+  body, .vd-dark body { background-attachment: scroll; }
+}
+
+
+.rail-btn.active {
+  background: rgba(44,132,224,0.12);
+  border-color: var(--rail-hover);
+  color: var(--rail-hover);
+}
+
+.vd-dark .rail-btn:hover,
+.vd-dark .rail-btn:focus-visible {
+  background: rgba(44,132,224,0.22);
+  border-color: #4ca0ea;
+  color: #dbeafe;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.35);
+}
+.vd-dark .rail-btn.active {
+  background: rgba(44,132,224,0.18);
+  border-color: #4ca0ea;
+  color: #bfe0ff;
+}
+:root{
+  --rail-bg:        #2C84E0;   /* base */
+  --rail-fg:        #fff;      /* icon color */
+  --rail-hover:     #4CA0EA;   /* hover/focus */
+  --rail-active:    #1E64B7;   /* active/selected */
+}
+
+/* Side menu buttons (left rail) */
+.rail-btn{
+  background: var(--rail-bg);
+  border-color: var(--rail-bg);
+  color: var(--rail-fg);
+  box-shadow: 0 4px 12px rgba(44,132,224,0.18);
+}
+.rail-btn svg{ stroke: currentColor; }
+
+.rail-btn:hover,
+.rail-btn:focus-visible{
+  background: var(--rail-hover);
+  border-color: var(--rail-hover);
+  color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(44,132,224,0.28);
+  outline: none;
+}
+
+.rail-btn.active{
+  background: var(--rail-active);
+  border-color: var(--rail-active);
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(30,100,183,0.30);
+}
+
+/* Dark theme tweaks */
+.vd-dark .rail-btn{
+  background: rgba(44,132,224,0.92);
+  border-color: rgba(44,132,224,0.92);
+  color: #eaf2ff;
+}
+.vd-dark .rail-btn:hover,
+.vd-dark .rail-btn:focus-visible{
+  background: rgba(76,160,234,0.95);
+  border-color: rgba(76,160,234,0.95);
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+}
+.vd-dark .rail-btn.active{
+  background: rgba(30,100,183,0.98);
+  border-color: rgba(30,100,183,0.98);
+  color: #fff;
+}

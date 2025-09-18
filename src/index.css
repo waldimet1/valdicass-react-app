@@ -62,6 +62,11 @@ button:focus,
 button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
+/* Global support for sticky headers */
+:root { --topbar-h: 0px; }
+
+/* Make in-page anchor jumps respect the sticky header height */
+html { scroll-padding-top: calc(var(--topbar-h) + 8px); }
 
 @media (prefers-color-scheme: light) {
   :root {

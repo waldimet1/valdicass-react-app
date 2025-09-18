@@ -1,10 +1,11 @@
 // src/QuotesPage.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { auth, db } from "./firebaseConfig"; // unified import
+import { auth, db } from "./firebaseConfig";
 import { onAuthStateChanged } from "firebase/auth";
-import { collection, onSnapshot, doc, getDoc } from "firebase/firestore";
-import QuoteStatusPill from "/components/quotes/QuoteStatusPill";
+import { collection, onSnapshot, doc, getDoc, deleteDoc, query, where } from "firebase/firestore";
+import { getStorage, ref as sRef, deleteObject } from "firebase/storage";
+import QuoteStatusPill from "./components/quotes/QuoteStatusPill";
 import { renderAndUploadQuotePdf } from "./utils/renderAndUploadQuotePdf";
 import { toast } from "react-toastify";
 
@@ -30,73 +31,106 @@ export default function QuotesPage() {
   const [quotes, setQuotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
-  const [savingId, setSavingId] = useState(null); // track per-row save
+  const [savingId, setSavingId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+// track previous values to avoid spamming on initial load
+const lastMapRef = useRef(new Map());
+const initialRef = useRef(true);
 
   const isAdmin = !!user && ADMIN_UIDS.includes(user.uid);
 
-  // Guard bad URLs like /quotes/foo
   useEffect(() => {
     if (!VALID_FILTERS.includes(filter)) navigate("/quotes/all", { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
 
-  // Keep auth state in sync
   useEffect(() => {
     if (!auth) return;
     const off = onAuthStateChanged(auth, setUser);
     return () => off();
   }, []);
 
-  // Single listener to ALL quotes; then client-side filter for ownership + category
   useEffect(() => {
-    if (!user) return;
-    setLoading(true);
-    setErr("");
+  if (!user) return;
+  setLoading(true);
+  setErr("");
 
-    const off = onSnapshot(
-      collection(db, "quotes"),
-      (snap) => {
-        const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const baseCol = collection(db, "quotes");
+   // Admins see all; everyone else only their own docs
+   const q = isAdmin ? baseCol : query(baseCol, where("createdBy", "==", user.uid));
 
-        // 1) Ownership filter
-        const mineOrAll = all.filter((q) => {
-          if (isAdmin) return true; // admins see everything
-          const owner = q.createdBy || q.userId || null; // tolerate legacy/missing
-          return owner === user.uid;
-        });
+   const off = onSnapshot(
+     q,
+    (snap) => {
+      // ---- ADMIN LIVE TOASTS (after initial load only) ----
+      if (isAdmin) {
+        if (initialRef.current) {
+          // prime the map on first snapshot so we don't fire toasts
+          snap.docs.forEach((d) => lastMapRef.current.set(d.id, d.data()));
+        } else {
+          snap.docChanges().forEach((ch) => {
+            const id = ch.doc.id;
+            const cur = ch.doc.data() || {};
+            const prev = lastMapRef.current.get(id) || {};
 
-        // 2) Category filter (support both schemas)
-        const rows = mineOrAll.filter((q) => {
-          const st = (q.status || "").toLowerCase();
-          const isViewed   = q.viewed === true   || st === "viewed";
-          const isSigned   = q.signed === true   || st === "signed";
-          const isDeclined = q.declined === true || st === "declined";
-          const isSent     = st === "sent" || (!isViewed && !isSigned && !isDeclined);
+            if (ch.type === "modified") {
+              if (!prev.viewed && cur.viewed)   toast.info(`👀 Viewed — ${cur.client?.name || id}`);
+              if (!prev.signed && cur.signed)   toast.success(`✅ Signed — ${cur.client?.name || id}`);
+              if (!prev.declined && cur.declined) toast.warn(`❌ Declined — ${cur.client?.name || id}`);
+            } else if (ch.type === "removed") {
+              // show who was deleted if we still have prev
+              toast.warn(`🗑️ Deleted — ${prev.client?.name || id}`);
+              lastMapRef.current.delete(id);
+              return; // nothing else to update for this change
+            }
 
-          switch (filter) {
-            case "viewed":   return isViewed;
-            case "signed":   return isSigned;
-            case "declined": return isDeclined;
-            case "sent":     return isSent;
-            case "all":
-            default:         return true;
-          }
-        });
-
-        // newest first
-        rows.sort((a, b) => (b?.createdAt?.seconds || 0) - (a?.createdAt?.seconds || 0));
-        setQuotes(rows);
-        setLoading(false);
-      },
-      (e) => {
-        console.error(e);
-        setErr("Failed to load quotes.");
-        setLoading(false);
+            // keep map current for added/modified
+            lastMapRef.current.set(id, cur);
+          });
+        }
+        initialRef.current = false;
       }
-    );
 
-    return () => off();
-  }, [user, filter, isAdmin]);
+      // ---- your existing filtering/sorting pipeline ----
+      const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+      const mineOrAll = all.filter((q) => {
+        if (isAdmin) return true; // admins see everything
+        const owner = q.createdBy || q.userId || null;
+        return owner === user.uid;
+      });
+
+      const rows = mineOrAll.filter((q) => {
+        const st = (q.status || "").toLowerCase();
+        const isViewed   = q.viewed === true   || st === "viewed";
+        const isSigned   = q.signed === true   || st === "signed";
+        const isDeclined = q.declined === true || st === "declined";
+        const isSent     = st === "sent" || (!isViewed && !isSigned && !isDeclined);
+
+        switch (filter) {
+          case "viewed":   return isViewed;
+          case "signed":   return isSigned;
+          case "declined": return isDeclined;
+          case "sent":     return isSent;
+          case "all":
+          default:         return true;
+        }
+      });
+
+      rows.sort((a, b) => (b?.createdAt?.seconds || 0) - (a?.createdAt?.seconds || 0));
+      setQuotes(rows);
+      setLoading(false);
+    },
+    (e) => {
+      console.error(e);
+      setErr("Failed to load quotes.");
+      setLoading(false);
+    }
+  );
+
+  return () => off();
+}, [user, filter, isAdmin]);
+
 
   const title = useMemo(() => {
     const s = filter[0].toUpperCase() + filter.slice(1);
@@ -105,7 +139,6 @@ export default function QuotesPage() {
 
   const baseUrl = window.location.origin.replace(/\/$/, "");
 
-  // Save PDF for a single row
   async function handleSavePdfFor(id) {
     try {
       setSavingId(id);
@@ -115,7 +148,7 @@ export default function QuotesPage() {
         return;
       }
       const quote = { id, ...snap.data() };
-      const url = await renderAndUploadQuotePdf(quote, id); // uploads to quotes/{id}/quote.pdf
+      const url = await renderAndUploadQuotePdf(quote, id);
       setQuotes((prev) => prev.map((q) => (q.id === id ? { ...q, pdfUrl: url } : q)));
       toast.success("PDF saved");
     } catch (e) {
@@ -125,6 +158,32 @@ export default function QuotesPage() {
       setSavingId(null);
     }
   }
+
+  async function handleDelete(id, ownerName, total) {
+  const prettyTotal = typeof total === "number" ? `$${Number(total).toLocaleString()}` : "";
+  const ok = window.confirm(
+    `Delete this quote for ${ownerName || "client"} ${prettyTotal ? `(${prettyTotal})` : ""}?\nThis cannot be undone.`
+  );
+  if (!ok) return;
+
+  try {
+    setDeletingId(id);
+    const res = await fetch("/api/delete-quote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ quoteId: id }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json?.ok) throw new Error(json?.error || `Failed (${res.status})`);
+    toast.success("Quote deleted");
+  } catch (e) {
+    console.error(e);
+    toast.error("Failed to delete quote");
+  } finally {
+    setDeletingId(null);
+  }
+}
+
 
   if (!user) {
     return (
@@ -136,45 +195,47 @@ export default function QuotesPage() {
 
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto", padding: 24 }}>
-      <header style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 16, flexWrap: "wrap" }}>
-        <h1 style={{ margin: 0, marginRight: 12 }}>{title}</h1>
+      {/* Title + filter chips + admin/back */}
+      <header style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <h1 style={{ margin: 0 }}>{title}</h1>
 
-        {VALID_FILTERS.map((f) => (
-          <button
-            key={f}
-            onClick={() => navigate(`/quotes/${f}`)}
-            style={{
-              padding: "6px 10px",
-              borderRadius: 8,
-              border: "1px solid #e5e7eb",
-              background: f === filter ? "#0b5fff" : "#fff",
-              color: f === filter ? "#fff" : "#111827",
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            {f[0].toUpperCase() + f.slice(1)}
-          </button>
-        ))}
+          <nav style={filtersWrap}>
+            {VALID_FILTERS.map((f) => {
+              const label = f[0].toUpperCase() + f.slice(1);
+              const active = f === filter;
+              return (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => navigate(`/quotes/${f}`)}
+                  style={{ ...chip, ...(active ? chipActive : null) }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </nav>
 
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
-          {isAdmin && (
-            <span
-              title="Admin mode — viewing all users' quotes"
-              style={{
-                padding: "4px 10px",
-                borderRadius: 999,
-                background: "#eef2ff",
-                color: "#3730a3",
-                fontWeight: 700,
-                fontSize: 12,
-                border: "1px solid #c7d2fe",
-              }}
-            >
-              ADMIN — All users
-            </span>
-          )}
-          <Link to="/dashboard" style={{ textDecoration: "none" }}>← Back to Dashboard</Link>
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+            {!!isAdmin && (
+              <span
+                title="Admin mode — viewing all users' quotes"
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: 999,
+                  background: "#eef2ff",
+                  color: "#3730a3",
+                  fontWeight: 700,
+                  fontSize: 12,
+                  border: "1px solid #c7d2fe",
+                }}
+              >
+                ADMIN — All users
+              </span>
+            )}
+            <Link to="/dashboard" style={{ textDecoration: "none" }}>← Back to Dashboard</Link>
+          </div>
         </div>
       </header>
 
@@ -194,62 +255,111 @@ export default function QuotesPage() {
                 <th style={th}>Email</th>
                 <th style={th}>Total</th>
                 <th style={th}>Status</th>
-                <th style={th}>Actions</th>
+                <th style={{ ...th, textAlign: "right" }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {quotes.map((q) => (
-                <tr key={q.id} style={{ borderTop: "1px solid #eee" }}>
-                  <td style={td}>{fmt(q.createdAt)}</td>
-                  <td style={td}>{q.client?.name || "—"}</td>
-                  <td style={td}>{q.client?.clientEmail || "—"}</td>
-                  <td style={td}>${Number(q.total || 0).toLocaleString()}</td>
-                  <td style={td}><QuoteStatusPill quoteId={q.id} showMeta={false} /></td>
-                  <td style={td}>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <a href={`${baseUrl}/view-quote?id=${q.id}`} target="_blank" rel="noreferrer" style={btnLink}>
-                        Open
-                      </a>
+              {quotes.map((q) => {
+                const isOwner = (q.createdBy || q.userId) === user.uid;
+                const canDelete = isAdmin || isOwner;
+                const hasPdf = !!q.pdfUrl;
 
-                      {/* NEW: Save PDF button */}
-                      <button
-                        onClick={() => handleSavePdfFor(q.id)}
-                        disabled={savingId === q.id}
-                        style={btn}
-                        title="Render & upload PDF"
-                      >
-                        {savingId === q.id ? "Saving…" : "Save PDF"}
-                      </button>
+                return (
+                  <tr key={q.id} style={{ borderTop: "1px solid #eee" }}>
+                    <td style={td}>{fmt(q.createdAt)}</td>
+                    <td style={td}>{q.client?.name || "—"}</td>
+                    <td style={td}>{q.client?.clientEmail || "—"}</td>
+                    <td style={td}>${Number(q.total || 0).toLocaleString()}</td>
+                    <td style={td}><QuoteStatusPill quoteId={q.id} showMeta={false} /></td>
 
-                      {/* NEW: Open PDF link if exists */}
-                      {q.pdfUrl && (
-                        <a href={q.pdfUrl} target="_blank" rel="noreferrer" style={btnLink}>
-                          Open PDF
-                        </a>
-                      )}
-
-                      <button
-                        onClick={() => navigator.clipboard.writeText(`${baseUrl}/view-quote?id=${q.id}`)}
-                        style={btn}
-                        title="Copy client link"
-                      >
-                        Copy Link
-                      </button>
-
-                      {!(q.signed || q.declined || q.status === "signed" || q.status === "declined") && (
-                        <>
-                          <a href={`${baseUrl}/sign?id=${q.id}`} target="_blank" rel="noreferrer" style={btnLink}>
-                            Sign
+                    {/* Toolbar-style actions */}
+                    <td style={{ ...td, textAlign: "right" }}>
+                      <div style={actionBar}>
+                        {/* Primary group */}
+                        <div style={group}>
+                          <a
+                            href={`${baseUrl}/view-quote?id=${q.id}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={btnGhost}
+                            title="Open quote"
+                          >
+                            Open
                           </a>
-                          <a href={`${baseUrl}/decline?id=${q.id}`} target="_blank" rel="noreferrer" style={btnLinkRed}>
-                            Decline
-                          </a>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+
+                          {hasPdf ? (
+                            <a
+                              href={q.pdfUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={btnPrimary}
+                              title="Open saved PDF"
+                            >
+                              Open PDF
+                            </a>
+                          ) : (
+                            <button
+                              onClick={() => handleSavePdfFor(q.id)}
+                              disabled={savingId === q.id}
+                              style={btnPrimary}
+                              title="Render & upload PDF"
+                            >
+                              {savingId === q.id ? "Saving…" : "Save PDF"}
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Utilities group */}
+                        <div style={group}>
+                          <button
+                            onClick={() =>
+                              navigator.clipboard.writeText(`${baseUrl}/view-quote?id=${q.id}`)
+                            }
+                            style={btnGhost}
+                            title="Copy client link"
+                          >
+                            Copy
+                          </button>
+
+                          {!(q.signed || q.declined || q.status === "signed" || q.status === "declined") && (
+                            <>
+                              <a
+                                href={`${baseUrl}/sign?id=${q.id}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={btnGhost}
+                                title="Client sign"
+                              >
+                                Sign
+                              </a>
+                              <a
+                                href={`${baseUrl}/decline?id=${q.id}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={btnWarn}
+                                title="Client decline"
+                              >
+                                Decline
+                              </a>
+                            </>
+                          )}
+
+                          {canDelete && (
+                            <button
+                              onClick={() => handleDelete(q.id, q.client?.name, q.total)}
+                              disabled={deletingId === q.id}
+                              style={btnDanger}
+                              title="Delete quote"
+                            >
+                              {deletingId === q.id ? "Deleting…" : "Delete"}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -258,18 +368,83 @@ export default function QuotesPage() {
   );
 }
 
+/* Table cells */
 const th = { textAlign: "left", padding: "10px 8px", fontWeight: 700, fontSize: 14, color: "#374151" };
 const td = { padding: "10px 8px", fontSize: 14 };
-const btn = {
-  padding: "6px 10px",
-  borderRadius: 8,
+
+/* Top filter chips */
+const filtersWrap = {
+  display: "flex",
+  gap: 8,
+  alignItems: "center",
+  flexWrap: "nowrap",
+  overflowX: "auto",
+  paddingBottom: 2,
+};
+const chip = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  height: 28,
+  lineHeight: "28px",
+  padding: "0 10px",
+  borderRadius: 999,
   border: "1px solid #e5e7eb",
   background: "#fff",
-  cursor: "pointer",
+  color: "#111827",
   fontWeight: 600,
+  cursor: "pointer",
+  textDecoration: "none",
+  whiteSpace: "nowrap",
 };
-const btnLink = { ...btn, textDecoration: "none", display: "inline-block" };
-const btnLinkRed = { ...btnLink, borderColor: "#fecaca", background: "#fee2e2" };
+const chipActive = { background: "#0b5fff", borderColor: "#0b5fff", color: "#fff" };
+
+/* Row action toolbar */
+const actionBar = {
+  display: "flex",
+  gap: 10,
+  justifyContent: "flex-end",
+  alignItems: "center",
+  flexWrap: "wrap",
+};
+
+const group = {
+  display: "inline-flex",
+  gap: 6,
+  padding: 4,
+  background: "#f3f4f6",           // gray-100
+  border: "1px solid #e5e7eb",     // gray-200
+  borderRadius: 999,
+};
+
+/* Buttons */
+const baseBtn = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  height: 32,
+  lineHeight: "32px",
+  padding: "0 12px",
+  borderRadius: 999,
+  border: "1px solid transparent",
+  fontWeight: 600,
+  cursor: "pointer",
+  textDecoration: "none",
+  whiteSpace: "nowrap",
+  background: "transparent",
+  color: "#111827",
+};
+
+const btnGhost  = { ...baseBtn, background: "#fff", borderColor: "#e5e7eb" };
+const btnPrimary= { ...baseBtn, background: "#0b5fff", borderColor: "#0b5fff", color: "#fff" };
+const btnWarn   = { ...baseBtn, background: "#fff", borderColor: "#fde68a", color: "#92400e" };  // amber outline
+const btnDanger = { ...baseBtn, background: "#fff", borderColor: "#fecaca", color: "#991b1b" };  // red outline
+
+
+
+
+
+
 
 
 

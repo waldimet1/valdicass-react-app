@@ -1,0 +1,28 @@
+# build outputs
+dist
+build
+.out
+.next
+.esbuild
+
+# dependencies & caches
+node_modules
+.pnpm-store
+.yarn
+.bun
+**/.cache
+
+# tools / SDKs
+google-cloud-sdk
+gcloud
+.terraform
+venv
+.venv
+**/__pycache__
+
+# logs & OS/editor junk
+*.log
+firebase-debug.log*
+.DS_Store
+.vscode
+.idea

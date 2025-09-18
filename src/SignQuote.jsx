@@ -3,8 +3,23 @@ import React, { useEffect, useRef, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import SignatureCanvas from "react-signature-canvas";
 import { doc, getDoc, updateDoc, Timestamp } from "firebase/firestore";
-import { db } from "./firebaseConfig";
+import { db, auth, storage } from "./firebaseConfig";
+import { signInAnonymously } from "firebase/auth";
+import { ref as sref, uploadString, getDownloadURL, deleteObject } from "firebase/storage";
+import { COMPANY } from "./companyInfo";
 
+// helpers
+const toClientName = (v) => {
+  if (typeof v === "string") return v;
+  if (v && typeof v === "object") {
+    return v.name || v.fullName || [v.firstName, v.lastName].filter(Boolean).join(" ").trim();
+  }
+  return "";
+};
+const getClientEmail = (q) =>
+  q?.clientEmail || q?.email || q?.client?.email || q?.client?.clientEmail || "";
+
+// optional server ping for alerts
 async function notifyAdmin(event, data) {
   try {
     await fetch("/api/notify-quote", {
@@ -17,7 +32,7 @@ async function notifyAdmin(event, data) {
   }
 }
 
-const SignQuote = () => {
+export default function SignQuote() {
   const [searchParams] = useSearchParams();
   const quoteId = searchParams.get("id");
   const navigate = useNavigate();
@@ -30,30 +45,40 @@ const SignQuote = () => {
   const [fullName, setFullName] = useState("");
   const sigRef = useRef(null);
 
+  // make sure we have an auth user (anonymous is fine)
   useEffect(() => {
-    const load = async () => {
+    if (!auth.currentUser) {
+      signInAnonymously(auth).catch((e) => {
+        console.warn("Anonymous sign-in failed (will retry on upload):", e);
+      });
+    }
+  }, []);
+
+  // load quote
+  useEffect(() => {
+    (async () => {
       try {
         if (!quoteId) {
           setError("Missing quote id in the URL.");
           setLoading(false);
           return;
         }
-        const ref = doc(db, "quotes", quoteId);
-        const snap = await getDoc(ref);
+        const snap = await getDoc(doc(db, "quotes", quoteId));
         if (!snap.exists()) {
           setError("Quote not found.");
           setLoading(false);
           return;
         }
-        setQuote({ id: snap.id, ...snap.data() });
+        const q = { id: snap.id, ...snap.data() };
+        setQuote(q);
+        document.title = `Sign Quote • ${q.number || q.id}`;
       } catch (e) {
         console.error(e);
         setError("Failed to load quote.");
       } finally {
         setLoading(false);
       }
-    };
-    load();
+    })();
   }, [quoteId]);
 
   const clearSignature = () => sigRef.current?.clear();
@@ -70,28 +95,53 @@ const SignQuote = () => {
 
     try {
       setSaving(true);
-      const dataUrl = sigRef.current.getTrimmedCanvas().toDataURL("image/png");
-      const ref = doc(db, "quotes", quoteId);
 
-      await updateDoc(ref, {
+      // ensure we’re authenticated (anonymous ok)
+      if (!auth.currentUser) {
+        await signInAnonymously(auth);
+      }
+
+      // 1) Upload signature image to Storage
+      const dataUrl = sigRef.current.getTrimmedCanvas().toDataURL("image/png");
+      const filePath = `signatures/${quoteId}/${Date.now()}.png`;
+      const fileRef = sref(storage, filePath);
+
+      await uploadString(fileRef, dataUrl, "data_url", {
+        contentType: "image/png",
+        cacheControl: "public,max-age=31536000",
+      });
+
+      const signatureUrl = await getDownloadURL(fileRef);
+
+      // 2) If there was a previous signature file, delete it
+      const oldPath = quote?.signatureStoragePath;
+      if (oldPath && oldPath !== filePath) {
+        try { await deleteObject(sref(storage, oldPath)); } catch (_) {}
+      }
+
+      // 3) Update Firestore doc with URL + path (no base64)
+      await updateDoc(doc(db, "quotes", quoteId), {
         signed: true,
-        status: "signed",
-        "statusTimestamps.signed": Timestamp.now(),
+        status: "Signed",
+        "statusTimestamps.Signed": Timestamp.now(),
         signedBy: fullName.trim(),
         signedAt: Timestamp.now(),
-        signatureDataUrl: dataUrl,
+        signatureUrl,
+        signatureStoragePath: filePath,
+        // optional: remove legacy base64 if it exists
+        signatureDataUrl: null,
       });
 
-      // notify admin
-      notifyAdmin("signed", {
+      // 4) Notify admin (best-effort)
+      await notifyAdmin("signed", {
         quoteId,
-        clientName: quote?.client?.name || "",
-        clientEmail: quote?.client?.clientEmail || "",
+        clientName: toClientName(quote?.client) || "Customer",
+        clientEmail: getClientEmail(quote),
         total: quote?.total || 0,
         signedBy: fullName.trim(),
+        signatureUrl,
       });
 
-      alert("✅ Thank you! Your quote has been signed.");
       navigate(`/view-quote?id=${quoteId}`);
     } catch (e) {
       console.error(e);
@@ -101,20 +151,23 @@ const SignQuote = () => {
     }
   };
 
+  // --- UI -------------------------------------------------------------------
   if (loading) return <div style={{ padding: 24, textAlign: "center" }}>Loading…</div>;
-  if (error) return <div style={{ padding: 24, color: "crimson", textAlign: "center" }}>{error}</div>;
-  if (!quote) return null;
+  if (error)   return <div style={{ padding: 24, color: "crimson", textAlign: "center" }}>{error}</div>;
+  if (!quote)  return null;
 
-  if (quote.signed) {
+  if (quote.signed || (typeof quote.status === "string" && quote.status.toLowerCase() === "signed")) {
     return (
       <div style={{ maxWidth: 900, margin: "0 auto", padding: 24, textAlign: "center" }}>
         <h2>Already Signed</h2>
-        <p>This quote has already been signed by {quote.signedBy || "the client"}.</p>
+        <p>
+          This quote has already been signed{quote.signedBy ? ` by ${quote.signedBy}` : ""}.
+        </p>
         <button onClick={() => navigate(`/view-quote?id=${quoteId}`)}>Back to Quote</button>
       </div>
     );
   }
-  if (quote.declined) {
+  if (quote.declined || (typeof quote.status === "string" && quote.status.toLowerCase() === "declined")) {
     return (
       <div style={{ maxWidth: 900, margin: "0 auto", padding: 24, textAlign: "center" }}>
         <h2>Quote Declined</h2>
@@ -124,12 +177,14 @@ const SignQuote = () => {
     );
   }
 
+  const clientName = toClientName(quote.client);
+
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
       <h1 style={{ marginBottom: 16 }}>Agree & Sign</h1>
 
       <section style={{ marginBottom: 16 }}>
-        <div><strong>Client:</strong> {quote.client?.name || "—"}</div>
+        <div><strong>Client:</strong> {clientName || "—"}</div>
         <div><strong>Total:</strong> ${Number(quote.total || 0).toLocaleString()}</div>
       </section>
 
@@ -140,49 +195,50 @@ const SignQuote = () => {
         value={fullName}
         onChange={(e) => setFullName(e.target.value)}
         placeholder="John Q. Client"
-        style={{
-          width: "100%",
-          padding: 10,
-          marginBottom: 12,
-          borderRadius: 6,
-          border: "1px solid #ddd",
-        }}
+        autoComplete="name"
+        style={{ width: "100%", padding: 10, marginBottom: 12, borderRadius: 8, border: "1px solid #dbe2ea" }}
       />
 
       <div style={{ marginBottom: 8 }}>Draw your signature below:</div>
-      <div
-        style={{
-          background: "#fff",
-          border: "1px solid #ccc",
-          borderRadius: 8,
-          padding: 8,
-          marginBottom: 12,
-        }}
-      >
+      <div style={{ background: "#fff", border: "1px solid #dbe2ea", borderRadius: 12, padding: 8, marginBottom: 12, boxShadow: "0 10px 24px rgba(2,29,78,0.08)" }}>
         <SignatureCanvas
           ref={sigRef}
           penColor="#111"
-          canvasProps={{ width: 850, height: 200, style: { width: "100%", height: 200 } }}
           backgroundColor="#fff"
+          canvasProps={{ width: 850, height: 200, style: { width: "100%", height: 200 } }}
         />
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         <button onClick={clearSignature}>Clear</button>
         <button onClick={() => navigate(`/view-quote?id=${quoteId}`)}>Back</button>
-        <button onClick={handleSubmit} disabled={saving} style={{ marginLeft: "auto" }}>
+        <button
+          onClick={handleSubmit}
+          disabled={saving}
+          style={{
+            marginLeft: "auto",
+            background: "#0b63b2",
+            color: "#fff",
+            border: "none",
+            padding: "10px 14px",
+            borderRadius: 10,
+            fontWeight: 700,
+            opacity: saving ? 0.7 : 1,
+            cursor: saving ? "not-allowed" : "pointer",
+          }}
+        >
           {saving ? "Saving…" : "Agree & Sign"}
         </button>
       </div>
 
-      <div style={{ fontSize: 12, color: "#666" }}>
+      <div style={{ fontSize: 12, color: "#667085" }}>
         By clicking “Agree & Sign”, you agree that this electronic signature is the legal equivalent
         of your manual signature.
       </div>
     </div>
   );
-};
+}
 
-export default SignQuote;
+
 
 
