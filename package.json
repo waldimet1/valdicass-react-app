@@ -16,6 +16,7 @@
     "@sparticuz/chromium": "^119.0.2",
     "axios": "^1.11.0",
     "firebase": "^11.10.0",
+    "firebase-admin": "^13.5.0",
     "framer-motion": "^12.23.12",
     "jspdf": "^3.0.1",
     "jspdf-autotable": "^5.0.2",

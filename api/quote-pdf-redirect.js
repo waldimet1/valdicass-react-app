@@ -1,22 +1,51 @@
-// api/quote-pdf-redirect.js
-import { adminDb } from "./_lib/firebaseAdmin";
+// api/quote-pdf-redirect.js (ESM)
+import admin from "firebase-admin";
+
+try {
+  admin.app();
+} catch {
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
+  let sa = undefined;
+  if (raw) {
+    sa = JSON.parse(raw);
+    if (sa?.private_key?.includes("\\n")) {
+      sa.private_key = sa.private_key.replace(/\\n/g, "\n");
+    }
+  }
+  admin.initializeApp(
+    sa
+      ? { credential: admin.credential.cert(sa) }
+      : { credential: admin.credential.applicationDefault() }
+  );
+}
+
+const db = admin.firestore();
 
 export default async function handler(req, res) {
   try {
-    const id = req.query?.id;
-    if (!id) return res.status(400).send("missing id");
+    const id = req.query?.id || req.query?.quoteId;
+    if (!id) return res.status(400).send("id required");
 
-    const snap = await adminDb.doc(`quotes/${id}`).get();
-    const pdfUrl = snap.exists ? snap.data().pdfUrl : null;
+    const snap = await db.collection("quotes").doc(id).get();
+    if (!snap.exists) return res.status(404).send("quote not found");
 
-    const app = process.env.APP_ORIGIN || `https://${req.headers.host}`;
-    const fallback = `${app}/view-quote?id=${encodeURIComponent(id)}&noPdf=1`;
+    const q = snap.data();
+    const url =
+      q?.pdfUrl || q?.pdfURL || q?.pdf || q?.fileUrl || q?.url || "";
 
-    res.writeHead(302, { Location: pdfUrl || fallback });
-    res.end();
+    if (!url) return res.status(404).send("pdfUrl missing on quote");
+
+    res.setHeader("Location", url);
+    res.status(302).end();
   } catch (e) {
-    console.error(e);
-    res.status(500).send("error");
+    console.error("quote-pdf-redirect error:", e);
+    res.status(500).send(e?.message || "server error");
   }
 }
+
+
+
+
+
+
 

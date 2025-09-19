@@ -1,5 +1,6 @@
 // src/components/NotificationBell.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   collection,
   onSnapshot,
@@ -50,10 +51,16 @@ function fmt(ts) {
 }
 
 export default function NotificationBell({ user }) {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [notifs, setNotifs] = useState([]);
   const audioRef = useRef(null);
-
+const goToQuote = (n, newTab = false) => {
+    const url = `/view-quote?id=${encodeURIComponent(n.quoteId)}`; // or `/estimate?id=${...}` if you prefer edit mode
+    if (newTab) window.open(url, "_blank", "noopener");
+    else navigate(url);
+  };
+  // live feed for this user
   useEffect(() => {
     if (!user?.uid) return;
     const q = query(
@@ -66,6 +73,7 @@ export default function NotificationBell({ user }) {
       const list = [];
       snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
       setNotifs((prev) => {
+        // play a tiny sound only when a NEW item arrives
         if (prev.length && list.length > prev.length && audioRef.current) {
           audioRef.current.currentTime = 0;
           audioRef.current.play().catch(() => {});
@@ -80,6 +88,7 @@ export default function NotificationBell({ user }) {
     () => notifs.filter((n) => !n.isRead).length,
     [notifs]
   );
+  const hasUnread = unreadCount > 0; // <-- drives the color change
 
   async function markOneRead(id) {
     try {
@@ -106,6 +115,7 @@ export default function NotificationBell({ user }) {
       <button
         onClick={() => setOpen((v) => !v)}
         aria-label="Notifications"
+        title={hasUnread ? `${unreadCount} unread` : "Notifications"}
         style={{
           position: "relative",
           display: "inline-flex",
@@ -114,9 +124,13 @@ export default function NotificationBell({ user }) {
           width: 40,
           height: 40,
           borderRadius: 999,
-          border: "1px solid #e5e7eb",
+          // 🔵 color shift when there are unread notifications
+          border: hasUnread ? "1px solid #0b63b2" : "1px solid #e5e7eb",
+          color: hasUnread ? "#0b63b2" : "#6b7280",
+          boxShadow: hasUnread ? "0 0 0 3px rgba(11,99,178,0.15)" : "none",
           background: "#fff",
           cursor: "pointer",
+          transition: "box-shadow .15s ease, color .15s ease, border-color .15s ease",
         }}
       >
         <Bell size={20} />
@@ -172,11 +186,21 @@ export default function NotificationBell({ user }) {
           )}
 
           {notifs.map((n) => (
-            <div
-              key={n.id}
+            <div              key={n.id}
               style={item(!n.isRead)}
-              onClick={() => markOneRead(n.id)}
-              title="Mark as read"
+              role="button"
+              tabIndex={0}
+              onClick={(e) => {
+                markOneRead(n.id);
+                goToQuote(n, e.metaKey || e.ctrlKey);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  markOneRead(n.id);
+                  goToQuote(n);
+                }
+              }}
+              title="Open quote"
             >
               <div style={{ fontSize: 14 }}>
                 <b>{n.clientName || "Client"}</b> opened quote <b>{n.quoteId}</b>
@@ -189,9 +213,10 @@ export default function NotificationBell({ user }) {
       )}
 
       <audio ref={audioRef} preload="auto">
-        {/* replace with your own tiny mp3 if desired */}
+        {/* optional: add a tiny mp3 here for the "new notification" ping */}
       </audio>
     </div>
   );
 }
+
 

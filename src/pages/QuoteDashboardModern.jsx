@@ -7,7 +7,16 @@ import {
   CheckSquare, Clock3, Settings, Sun, Moon,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { collection, onSnapshot, query as fsQuery, orderBy, deleteDoc, doc } from "firebase/firestore";
+import {
+  collection,
+  onSnapshot,
+  query as fsQuery,
+  orderBy,
+  deleteDoc,
+  doc,
+  addDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 import { db } from "../firebaseConfig";
 import valdicassLogo from "../assets/valdicass-logo.png";
 import TopbarGuard from "../components/TopbarGuard";
@@ -19,7 +28,7 @@ import NotificationBell from "../components/NotificationBell";
  * Valdicass Quote Dashboard — Modern v2
  */
 
-const SEND_ENDPOINT = import.meta.env.VITE_SENDQUOTE_ENDPOINT || "/api/sendQuoteEmail";
+const SEND_ENDPOINT = import.meta.env.VITE_SENDQUOTE_ENDPOINT || "/api/send-quote";
 
 const SAMPLE_QUOTES = [
   { id: "Q-10247", client: "Heather M.", location: "La Grange, IL", createdAt: "2025-08-28", total: 14872.0, status: "Viewed", items: 6 },
@@ -48,6 +57,13 @@ const toClientName = (v) => {
   }
   return "";
 };
+const getClientEmail = (q) =>
+  q?.clientEmail ||
+  q?.client?.email ||
+  q?.email ||
+  q?.userEmail ||
+  q?.customer?.email ||
+  "";
 
 export default function QuoteDashboardModern({ user }) {
   const [query, setQuery] = useState("");
@@ -57,7 +73,9 @@ export default function QuoteDashboardModern({ user }) {
   const [quotes, setQuotes] = useState([]);
   const navigate = useNavigate();
   const { pathname } = useLocation();
-
+ const [toasts, setToasts] = useState([]);
+ const toast = (msg, type = "ok") =>
+   setToasts((l) => [...l, { id: Math.random().toString(36).slice(2), ts: Date.now(), type, msg }]);
   const goto = (path) => () => navigate(path);
   const isActive = (path) => pathname === path || pathname.startsWith(path + "/");
 
@@ -83,26 +101,71 @@ export default function QuoteDashboardModern({ user }) {
   const gotoEdit = (id) => navigate(`/estimate?id=${id}`);   // edit form
 
   const resendQuote = async (row) => {
-    try {
-      const shareUrl = `${window.location.origin}/view-quote?id=${row.id}`;
-      const payload = {
-        quoteId: row.id,
-        clientEmail: row.clientEmail || row.email || "",
-        clientName: toClientName(row.client) || "Customer",
-        total: row.total || 0,
-        shareUrl,
-      };
-      const res = await fetch(SEND_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      alert(`Quote ${row.id} re-sent${payload.clientEmail ? ` to ${payload.clientEmail}` : ""}.`);
-    } catch (err) {
-      alert(`Failed to resend: ${err.message}`);
+  try {
+    // Required guards — fail early with a toast instead of a 400
+    if (!row?.id) {
+      toast("This quote is missing its ID.", "error");
+      return;
     }
-  };
+    const email = getClientEmail(row);
+    if (!email) {
+      toast("No client email is set on this quote.", "error");
+      return;
+    }
+
+    // Build share URL with UTM tracking
+    const u = new URL("/view-quote", window.location.origin);
+    u.searchParams.set("id", row.id);              // <-- must be "id"
+    u.searchParams.set("utm_source", "valdicass-app");
+    u.searchParams.set("utm_medium", "email");
+    u.searchParams.set("utm_campaign", "quote");
+    u.searchParams.set("utm_content", user?.uid || "unknown");
+    const shareUrl = u.toString();
+
+    const payload = {
+      quoteId: row.id,
+      clientEmail: email,
+      clientName: toClientName(row.client) || "Customer",
+      total: row.total || 0,
+      shareUrl,
+      fromEmail: user?.email || "",
+      fromName: user?.displayName || user?.name || "Valdicass",
+      replyTo: user?.email || "",
+    };
+
+    const res = await fetch(SEND_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      let body = "";
+      try { body = await res.text(); } catch {}
+      throw new Error(`${res.status} ${res.statusText}${body ? " – " + body.slice(0,200) : ""}`);
+    }
+
+    // Log the send
+    try {
+      await addDoc(collection(db, "quoteLogs"), {
+        quoteId: row.id,
+        event: "EMAIL_SENT",
+        to: email,
+        by: user?.uid || null,
+        at: serverTimestamp(),
+        shareUrl,
+      });
+    } catch (e) {
+      console.warn("quoteLogs add failed:", e?.message || e);
+    }
+
+    toast(`Email sent to ${email}`);
+  } catch (err) {
+    toast(`Failed to send: ${err.message || "Unknown error"}`, "error");
+  }
+};
+
+
 
   const deleteQuote = async (id) => {
     if (!window.confirm(`Delete ${id}? This cannot be undone.`)) return;
@@ -317,6 +380,8 @@ export default function QuoteDashboardModern({ user }) {
         <button className="fab" onClick={gotoNew} aria-label="Create new quote">
           <Plus size={22} />
         </button>
+        <ToastHost toasts={toasts} setToasts={setToasts} />
+
       </main>
     </div>
   );
@@ -387,6 +452,34 @@ function EmptyStateModern({ onNew }) {
       <h3>No results</h3>
       <p>Try adjusting filters or create your next quote.</p>
       <button className="btn primary" onClick={onNew}><Plus size={18}/> New Quote</button>
+    </div>
+  );
+}
+function ToastHost({ toasts, setToasts }) {
+  useEffect(() => {
+    const id = setInterval(() => {
+      setToasts((list) => list.filter((t) => Date.now() - t.ts < 3500));
+    }, 500);
+    return () => clearInterval(id);
+  }, [setToasts]);
+
+  return (
+    <div style={{ position: "fixed", right: 16, bottom: 16, display: "grid", gap: 8, zIndex: 1000 }}>
+      {toasts.map((t) => (
+        <div key={t.id}
+          style={{
+            padding: "10px 12px",
+            borderRadius: 10,
+            border: "1px solid var(--line)",
+            background: t.type === "error" ? "#fff2f3" : "#eaf2ff",
+            color: t.type === "error" ? "#b4232a" : "#1b4ed1",
+            minWidth: 220,
+            boxShadow: "0 10px 20px rgba(2,29,78,0.12)"
+          }}>
+          <b style={{ marginRight: 6 }}>{t.type === "error" ? "Error" : "Sent"}</b>
+          <span>{t.msg}</span>
+        </div>
+      ))}
     </div>
   );
 }

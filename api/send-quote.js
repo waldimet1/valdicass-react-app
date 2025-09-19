@@ -1,34 +1,72 @@
+// api/send-quote.js
 import sgMail from "@sendgrid/mail";
 
-sgMail.setApiKey(process.env.SENDGRID_API_KEY || "");
+const allowedDomain = (process.env.SENDGRID_ALLOWED_FROM_DOMAIN || "").toLowerCase();
+const fallbackFrom  = process.env.SENDGRID_FROM;
+
+function isAllowedFrom(email) {
+  if (!email || !allowedDomain) return false;
+  const m = String(email).toLowerCase().match(/@([^@]+)$/);
+  return !!m && m[1] === allowedDomain;
+}
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "Method Not Allowed" });
+  if (req.method === "OPTIONS") return res.status(204).end();
+  if (req.method !== "POST") return res.status(405).send("Method Not Allowed");
+
+  const { SENDGRID_API_KEY } = process.env;
+  if (!SENDGRID_API_KEY) return res.status(500).send("SENDGRID_API_KEY not set");
+  if (!fallbackFrom) return res.status(500).send("SENDGRID_FROM not set");
+
+  // parse body
+  const body = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
+  const { quoteId, clientEmail, clientName, total, shareUrl, fromEmail, fromName, replyTo } = body;
+
+  if (!quoteId) return res.status(400).send("quoteId required");
+  if (!clientEmail) return res.status(400).send("clientEmail required");
+  if (!shareUrl) return res.status(400).send("shareUrl required");
+
+  // choose FROM: salesperson@valdicass.com if allowed, else fallback
+  const chosenFromEmail = isAllowedFrom(fromEmail) ? fromEmail : fallbackFrom;
+  const chosenFromName  = fromName || "Valdicass";
+
+  sgMail.setApiKey(SENDGRID_API_KEY);
+
+  const subject = `Your Valdicass estimate ${quoteId}`;
+  const currency = (total ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 });
+
+  const msg = {
+    to: clientEmail,
+    from: { email: chosenFromEmail, name: chosenFromName },
+    // reply-to: prefer salesperson (even if FROM fell back)
+    ...(replyTo ? { replyTo: { email: replyTo, name: chosenFromName } } : {}),
+    subject,
+    text: `Hi ${clientName || "there"},
+Your estimate ${quoteId} is ready:
+${shareUrl}
+
+Total: $${currency}
+
+Thanks,
+Valdicass`,
+    html: `
+      <p>Hi ${clientName || "there"},</p>
+      <p>Your estimate <b>${quoteId}</b> is ready.</p>
+      <p><a href="${shareUrl}" target="_blank">View your estimate</a></p>
+      <p>Total: <b>$${currency}</b></p>
+      <p>Thanks,<br/>Valdicass</p>
+    `,
+  };
 
   try {
-    const { quoteId, clientEmail, clientName = "Customer", total = 0, shareUrl } = req.body || {};
-    if (!quoteId || !shareUrl) return res.status(400).json({ error: "Missing quoteId or shareUrl" });
-
-    if (!process.env.SENDGRID_API_KEY) {
-      return res.status(500).json({ error: "SENDGRID_API_KEY not set" });
-    }
-
-    await sgMail.send({
-      to: clientEmail,
-      from: process.env.SENDGRID_FROM || "no-reply@valdicass.com",
-      subject: `Your Valdicass Quote ${quoteId}`,
-      html: `
-        <div style="font-family:system-ui,Arial,sans-serif">
-          <h2>Hi ${clientName}, your quote is ready</h2>
-          <p>Total: <b>$${Number(total).toLocaleString()}</b></p>
-          <p><a href="${shareUrl}">View your quote</a></p>
-        </div>
-      `,
-    });
-
-    res.status(200).json({ ok: true });
+    await sgMail.send(msg);
+    return res.status(200).json({ ok: true, from: chosenFromEmail });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message || "Send failed" });
+    console.error("send-quote error:", err?.response?.body || err);
+    return res.status(500).send(
+      err?.response?.body ? JSON.stringify(err.response.body) : (err?.message || "Internal error")
+    );
   }
 }
+
+
