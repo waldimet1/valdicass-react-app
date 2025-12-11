@@ -4,15 +4,12 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || import.meta.env.VITE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || import.meta.env.VITE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || import.meta.env.VITE_PROJECT_ID,
-  storageBucket:
-    import.meta.env.VITE_FIREBASE_STORAGE_BUCKET ||
-    import.meta.env.VITE_STORAGE_BUCKET, // fallback
-  messagingSenderId:
-    import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || import.meta.env.VITE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || import.meta.env.VITE_APP_ID,
+  apiKey: "AIzaSyDEttheiXvrEntggpCq60VosPzsoJ3CyI0",
+  authDomain: "valdicass-estimates-69b4d.firebaseapp.com",
+  projectId: "valdicass-estimates-69b4d",
+  storageBucket: "valdicass-estimates-69b4d.firebasestorage.app",
+  messagingSenderId: "719999568330",
+  appId: "1:719999568330:web:dd328bbf3976076db7a733"
 };
 
 const app = initializeApp(firebaseConfig);

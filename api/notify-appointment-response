@@ -1,0 +1,315 @@
+// api/notify-appointment-response.js
+// Simplified version - Gets appointment data from request body instead of Firestore
+
+const sgMail = require('@sendgrid/mail');
+
+module.exports = async (req, res) => {
+  // Enable CORS
+  res.setHeader('Access-Control-Allow-Credentials', true);
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
+  );
+
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  // Set SendGrid API key
+  if (!process.env.SENDGRID_API_KEY) {
+    console.error('❌ SENDGRID_API_KEY not found');
+    return res.status(500).json({ 
+      ok: false,
+      error: 'SendGrid API key not configured' 
+    });
+  }
+
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+  try {
+    const { 
+      appointmentId, 
+      response, 
+      rescheduleData,
+      appointment // Pass entire appointment object from frontend
+    } = req.body;
+
+    if (!appointmentId || !response || !appointment) {
+      return res.status(400).json({ 
+        error: 'Missing required fields',
+        ok: false 
+      });
+    }
+
+    const salesRepEmail = appointment.createdByEmail || appointment.createdBy;
+    
+    if (!salesRepEmail) {
+      console.error('No sales rep email found');
+      return res.status(400).json({ 
+        error: 'Sales rep email not found',
+        ok: false 
+      });
+    }
+
+    // Format the appointment date
+    const date = new Date(appointment.date);
+    const formattedDate = date.toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    });
+    const formattedTime = date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+
+    // Get response info
+    const getResponseInfo = (response) => {
+      const info = {
+        confirmed: { label: 'Confirmed', emoji: '✓', color: '#00a651' },
+        declined: { label: 'Declined', emoji: '✗', color: '#dc3545' },
+        rescheduled: { label: 'Reschedule Requested', emoji: '📅', color: '#007bff' },
+      };
+      return info[response] || info.confirmed;
+    };
+
+    const responseInfo = getResponseInfo(response);
+
+    // Reschedule section
+    let rescheduleSection = '';
+    if (response === 'rescheduled' && rescheduleData) {
+      const preferredDate = new Date(rescheduleData.preferredDate);
+      const formattedPreferredDate = preferredDate.toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+      });
+
+      rescheduleSection = `
+        <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 16px; margin: 20px 0; border-radius: 4px;">
+          <strong style="color: #856404;">Reschedule Request:</strong>
+          <p style="margin: 8px 0 0 0; color: #856404;">
+            <strong>Preferred Date:</strong> ${formattedPreferredDate}<br>
+            <strong>Preferred Time:</strong> ${rescheduleData.preferredTime}<br>
+            ${rescheduleData.notes ? `<strong>Notes:</strong> ${rescheduleData.notes}` : ''}
+          </p>
+        </div>
+      `;
+    }
+
+    const emailHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+            line-height: 1.6; 
+            color: #333; 
+            margin: 0; 
+            padding: 0;
+            background-color: #f5f5f5;
+          }
+          .email-container { 
+            max-width: 600px; 
+            margin: 40px auto; 
+            background: white; 
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+          }
+          .email-header { 
+            background: ${responseInfo.color}; 
+            color: white; 
+            padding: 30px; 
+            text-align: center;
+          }
+          .email-header h1 { 
+            margin: 0; 
+            font-size: 24px; 
+            font-weight: 700;
+          }
+          .email-body { padding: 30px; }
+          .status-badge {
+            display: inline-block;
+            background: ${responseInfo.color};
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 700;
+            margin: 16px 0;
+          }
+          .appointment-details {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+          }
+          .detail-row {
+            margin-bottom: 12px;
+          }
+          .detail-row:last-child { margin-bottom: 0; }
+          .detail-row strong {
+            display: inline-block;
+            width: 120px;
+            color: #555;
+          }
+          .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            background: #007bff;
+            color: white !important;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 600;
+            margin: 16px 0;
+          }
+          .email-footer {
+            background: #f8f9fa;
+            padding: 20px 30px;
+            text-align: center;
+            color: #666;
+            font-size: 13px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="email-container">
+          <div class="email-header">
+            <h1>${responseInfo.emoji} Appointment ${responseInfo.label}</h1>
+          </div>
+          
+          <div class="email-body">
+            <p><strong>Hi ${appointment.createdByName || 'there'},</strong></p>
+            
+            <p>${appointment.clientName} has responded to your appointment invitation.</p>
+            
+            <div class="status-badge">${responseInfo.label}</div>
+            
+            ${rescheduleSection}
+            
+            <div class="appointment-details">
+              <div class="detail-row">
+                <strong>Client:</strong> ${appointment.clientName}
+              </div>
+              <div class="detail-row">
+                <strong>Email:</strong> ${appointment.clientEmail}
+              </div>
+              ${appointment.phone ? `
+              <div class="detail-row">
+                <strong>Phone:</strong> ${appointment.phone}
+              </div>
+              ` : ''}
+              <div class="detail-row">
+                <strong>Original Date:</strong> ${formattedDate}
+              </div>
+              <div class="detail-row">
+                <strong>Original Time:</strong> ${formattedTime}
+              </div>
+              ${appointment.address ? `
+              <div class="detail-row">
+                <strong>Location:</strong> ${appointment.address}
+              </div>
+              ` : ''}
+            </div>
+            
+            ${response === 'rescheduled' ? `
+              <p style="background: #fff3cd; padding: 12px; border-radius: 6px; color: #856404;">
+                <strong>Action Required:</strong> Please contact ${appointment.clientName} to confirm the new appointment time.
+              </p>
+            ` : ''}
+            
+            <div style="text-align: center; margin-top: 24px;">
+              <a href="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/schedule" class="btn">
+                View in Schedule
+              </a>
+            </div>
+          </div>
+          
+          <div class="email-footer">
+            <p><strong>Valdicass</strong> - Appointment Management System</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    // Plain text
+    const emailText = `
+Appointment ${responseInfo.label}
+
+Hi ${appointment.createdByName || 'there'},
+
+${appointment.clientName} has responded to your appointment invitation.
+
+Status: ${responseInfo.label}
+
+${response === 'rescheduled' && rescheduleData ? `
+Reschedule Request:
+Preferred Date: ${rescheduleData.preferredDate}
+Preferred Time: ${rescheduleData.preferredTime}
+${rescheduleData.notes ? `Notes: ${rescheduleData.notes}` : ''}
+` : ''}
+
+Original Appointment Details:
+Client: ${appointment.clientName}
+Email: ${appointment.clientEmail}
+${appointment.phone ? `Phone: ${appointment.phone}` : ''}
+Date: ${formattedDate}
+Time: ${formattedTime}
+${appointment.address ? `Location: ${appointment.address}` : ''}
+
+---
+Valdicass
+    `.trim();
+
+    // Send email
+    const msg = {
+      to: salesRepEmail,
+      from: {
+        email: process.env.SENDGRID_FROM_EMAIL || 'no-reply@valdicass.com',
+        name: 'Valdicass Appointments'
+      },
+      subject: `${responseInfo.emoji} Appointment ${responseInfo.label} - ${appointment.clientName}`,
+      text: emailText,
+      html: emailHtml,
+    };
+
+    console.log('📤 Sending notification to:', salesRepEmail);
+    await sgMail.send(msg);
+    
+    console.log('✅ Notification sent successfully');
+
+    res.status(200).json({ 
+      ok: true,
+      message: 'Notification sent successfully' 
+    });
+
+  } catch (error) {
+    console.error('❌ Error sending notification:', error);
+    
+    if (error.response) {
+      console.error('SendGrid error:', error.response.body);
+      return res.status(error.code || 500).json({ 
+        ok: false,
+        error: error.response.body.errors?.[0]?.message || 'Failed to send notification'
+      });
+    }
+    
+    res.status(500).json({ 
+      ok: false,
+      error: error.message || 'Internal server error' 
+    });
+  }
+};

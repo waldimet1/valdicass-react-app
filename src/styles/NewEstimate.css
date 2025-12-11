@@ -1,0 +1,778 @@
+/* Clean Estimate Form - PDF Friendly */
+
+.estimate-container {
+  max-width: 900px;
+  margin: 0 auto;
+  background: white;
+}
+
+/* Header & Footer */
+.estimate-header,
+.estimate-footer {
+  padding: 20px;
+  background: white;
+  border-bottom: 1px solid #e2e8f0;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.estimate-footer {
+  top: auto;
+  bottom: 0;
+  border-top: 1px solid #e2e8f0;
+  border-bottom: none;
+}
+
+.estimate-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.actions-right {
+  display: flex;
+  gap: 10px;
+}
+
+/* Buttons */
+.btn-cancel {
+  padding: 10px 20px;
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  color: #4a5568;
+}
+
+.btn-cancel:hover {
+  background: #edf2f7;
+}
+
+.btn-save-draft {
+  padding: 10px 20px;
+  background: white;
+  border: 1px solid #cbd5e0;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  color: #2d3748;
+}
+
+.btn-save-draft:hover {
+  background: #f7fafc;
+}
+
+.btn-save-send {
+  padding: 10px 24px;
+  background: #48bb78;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  color: white;
+}
+
+.btn-save-send:hover {
+  background: #38a169;
+}
+
+/* Main Content */
+.estimate-content {
+  padding: 40px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+/* Company Header */
+.company-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 30px;
+  padding-bottom: 30px;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+/* Salesperson Section */
+.salesperson-section {
+  background: #f7fafc;
+  padding: 15px 20px;
+  border-radius: 6px;
+  border-left: 4px solid #667eea;
+  margin-bottom: 30px;
+}
+
+.salesperson-section h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: #4a5568;
+  margin: 0 0 8px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.salesperson-info p {
+  margin: 4px 0;
+  font-size: 14px;
+  color: #2d3748;
+}
+
+.salesperson-info strong {
+  font-weight: 600;
+}
+
+.company-logo img {
+  height: 60px;
+}
+
+.company-info {
+  text-align: right;
+}
+
+.company-info h3 {
+  margin: 0 0 10px 0;
+  font-size: 20px;
+  color: #2d3748;
+}
+
+.company-info p {
+  margin: 4px 0;
+  font-size: 13px;
+  color: #4a5568;
+  line-height: 1.4;
+}
+
+/* Info Grid */
+.info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 30px;
+  margin-bottom: 40px;
+}
+
+.info-section h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #2d3748;
+  margin: 0 0 15px 0;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+.form-field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: #4a5568;
+  margin-bottom: 6px;
+}
+
+.form-field input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.form-field input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+/* Client Selection */
+.client-selected {
+  padding: 15px;
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.client-details strong {
+  display: block;
+  font-size: 15px;
+  color: #2d3748;
+  margin-bottom: 8px;
+}
+
+.client-details p {
+  margin: 4px 0;
+  font-size: 13px;
+  color: #4a5568;
+}
+
+.btn-change {
+  margin-top: 12px;
+  padding: 6px 16px;
+  background: white;
+  border: 1px solid #cbd5e0;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  color: #2d3748;
+}
+
+.client-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.client-select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 14px;
+  background: white;
+}
+
+.btn-add-client {
+  padding: 10px;
+  background: #667eea;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  color: white;
+}
+
+/* Sections */
+.section {
+  margin-bottom: 30px;
+}
+
+.section h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #2d3748;
+  margin: 0 0 15px 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+/* Line Items Table */
+.line-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 15px;
+}
+
+.line-items-table thead th {
+  text-align: left;
+  padding: 10px;
+  background: #f7fafc;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4a5568;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.line-items-table tbody td {
+  padding: 10px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.line-items-table input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.line-items-table .amount {
+  text-align: right;
+  font-weight: 500;
+  color: #2d3748;
+}
+
+.btn-remove {
+  background: #fff5f5;
+  color: #e53e3e;
+  border: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.btn-remove:hover {
+  background: #fed7d7;
+}
+
+.btn-add-item {
+  padding: 10px 20px;
+  background: white;
+  border: 1px dashed #cbd5e0;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  color: #4a5568;
+  width: 100%;
+}
+
+.btn-add-item:hover {
+  border-color: #667eea;
+  color: #667eea;
+}
+
+/* Totals */
+.totals-section {
+  margin: 30px 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.totals-grid {
+  width: 350px;
+}
+
+.total-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.total-row.editable {
+  align-items: center;
+}
+
+.total-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.total-label input {
+  width: 80px;
+  padding: 6px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.total-row.grand-total {
+  border-top: 2px solid #2d3748;
+  border-bottom: none;
+  padding-top: 15px;
+  margin-top: 10px;
+  font-size: 18px;
+}
+
+.negative {
+  color: #e53e3e;
+}
+
+/* Textarea */
+textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 14px;
+  font-family: inherit;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+textarea:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.contract-text {
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  background: #f7fafc;
+}
+
+/* Photos & Attachments */
+.upload-area {
+  margin-bottom: 15px;
+}
+
+.btn-upload {
+  padding: 10px 20px;
+  background: white;
+  border: 1px dashed #cbd5e0;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  color: #4a5568;
+}
+
+.btn-upload:hover {
+  border-color: #667eea;
+  color: #667eea;
+}
+
+.photos-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.photo-thumb {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+}
+
+.photo-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.remove-photo {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background: rgba(229, 62, 62, 0.9);
+  color: white;
+  border: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.attachments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.attachment {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.remove-attachment {
+  background: #fff5f5;
+  color: #e53e3e;
+  border: none;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+/* Financing */
+.section-toggle label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  color: #2d3748;
+}
+
+.financing-box {
+  padding: 15px;
+  background: #e6f2ff;
+  border: 1px solid #667eea;
+  border-radius: 6px;
+  margin-top: 15px;
+}
+
+.financing-box p {
+  margin: 8px 0;
+  font-size: 14px;
+  color: #2d3748;
+}
+
+.financing-box input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e0;
+  border-radius: 4px;
+  font-size: 14px;
+  margin-top: 10px;
+}
+
+/* Signatures */
+.signatures-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 30px;
+  margin-top: 15px;
+}
+
+.signature-box label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 15px;
+  font-weight: 500;
+  color: #2d3748;
+}
+
+.signature-line {
+  height: 60px;
+  border-bottom: 2px solid #2d3748;
+  margin-top: 10px;
+}
+
+.signature-label {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #718096;
+  text-align: center;
+}
+
+/* Admin-Only Sections (Contract, Policies, Cancellation) */
+.admin-only-section {
+  border: 2px solid #fbd38d;
+  background: #fffaf0;
+  padding: 25px;
+  border-radius: 8px;
+}
+
+.cancellation-section {
+  border-color: #feb2b2;
+  background: #fff5f5;
+}
+
+/* Cancellation Form - Customer Fillable */
+.cancellation-form-section {
+  background: white;
+  border: 3px solid #2d3748;
+  padding: 30px;
+  margin-top: 20px;
+}
+
+.cancellation-form-section h3 {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 700;
+  color: #2d3748;
+  margin-bottom: 25px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.cancellation-deadline {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.cancellation-deadline p {
+  font-size: 14px;
+  font-weight: 600;
+  color: #4a5568;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.deadline-date {
+  font-size: 20px;
+  font-weight: 700;
+  color: #e53e3e;
+  padding: 12px 20px;
+  background: #fff5f5;
+  border: 2px solid #fc8181;
+  border-radius: 6px;
+  display: inline-block;
+}
+
+.cancellation-statement {
+  text-align: center;
+  margin: 30px 0;
+  padding: 20px;
+  background: #f7fafc;
+  border-radius: 6px;
+}
+
+.cancel-text {
+  font-size: 16px;
+  font-weight: 700;
+  color: #2d3748;
+  margin: 0;
+  letter-spacing: 0.5px;
+}
+
+.cancellation-signatures {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 40px;
+  margin-top: 30px;
+}
+
+.cancel-signature-field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cancel-signature-field label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #4a5568;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.signature-input,
+.date-input {
+  padding: 12px;
+  border: 2px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 16px;
+  font-family: 'Brush Script MT', cursive;
+  transition: border-color 0.2s;
+}
+
+.signature-input:focus,
+.date-input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.signature-input:disabled,
+.date-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cancellation-expired-notice {
+  margin-top: 20px;
+  padding: 15px;
+  background: #fff5f5;
+  border: 2px solid #fc8181;
+  border-radius: 6px;
+  color: #742a2a;
+  font-weight: 600;
+  text-align: center;
+}
+
+.cancellation-active-notice {
+  margin-top: 20px;
+  padding: 15px;
+  background: #f0fff4;
+  border: 2px solid #68d391;
+  border-radius: 6px;
+  color: #22543d;
+  font-weight: 600;
+  text-align: center;
+}
+
+.section-header-with-badge {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.admin-only-badge {
+  background: #feb2b2;
+  color: #742a2a;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.admin-note {
+  margin-top: 12px;
+  padding: 12px;
+  background: #fff5f5;
+  border: 1px solid #feb2b2;
+  border-radius: 6px;
+  color: #742a2a;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .estimate-content {
+    padding: 20px;
+  }
+  
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .company-header {
+    flex-direction: column;
+    gap: 20px;
+  }
+  
+  .company-info {
+    text-align: left;
+  }
+  
+  .line-items-table {
+    font-size: 12px;
+  }
+  
+  .photos-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .signatures-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .cancellation-signatures {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+}
+
+/* Print Styles */
+@media print {
+  .estimate-header,
+  .estimate-footer {
+    display: none;
+  }
+  
+  .estimate-content {
+    padding: 0;
+    max-width: 100%;
+  }
+  
+  .btn-change,
+  .btn-add-item,
+  .btn-upload,
+  .btn-remove,
+  .remove-photo,
+  .remove-attachment {
+    display: none;
+  }
+}

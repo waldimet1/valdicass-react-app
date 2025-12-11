@@ -4,18 +4,19 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "prebuild": "echo skip env verify",   
+    "dev": "vite",
+    "prebuild": "echo skip env verify",
     "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
     "@react-pdf/renderer": "^4.3.0",
-    "@sendgrid/mail": "^8.1.5",
+    "@sendgrid/mail": "^8.1.6",
     "@sparticuz/chromium": "^119.0.2",
     "axios": "^1.11.0",
     "firebase": "^11.10.0",
-    "firebase-admin": "^13.5.0",
+    "firebase-admin": "^13.6.0",
     "framer-motion": "^12.23.12",
     "jspdf": "^3.0.1",
     "jspdf-autotable": "^5.0.2",

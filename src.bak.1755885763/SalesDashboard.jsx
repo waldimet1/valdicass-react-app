@@ -157,7 +157,12 @@ const SalesDashboardLiveTest = () => {
   const handleView = (quoteId) => navigate(`/view-quote?id=${quoteId}`); // match your route
   const handleEdit = (quoteId) => navigate(`/edit?id=${quoteId}`);
 
-  // 🔁 REPLACED: send email through the Vercel API
+  // Simple download handler (adjust route if you have a dedicated PDF endpoint)
+  const handleDownload = (quoteId) => {
+    navigate(`/view-quote?id=${quoteId}&download=1`);
+  };
+
+  // 🔁 Send email through the Vercel API
   const handleResend = async (quote) => {
     const email = quote.client?.clientEmail || quote.client?.email; // support both shapes
     if (!email) {
@@ -195,7 +200,13 @@ const SalesDashboardLiveTest = () => {
 
   // Optional: show counts on tabs
   const tabCounts = useMemo(() => {
-    const counts = { All: quotes.length, Sent: 0, Viewed: 0, Signed: 0, Declined: 0 };
+    const counts = {
+      All: quotes.length,
+      Sent: 0,
+      Viewed: 0,
+      Signed: 0,
+      Declined: 0,
+    };
     quotes.forEach((q) => {
       const s = normalize(q);
       if (s.sent) counts.Sent++;
@@ -207,74 +218,105 @@ const SalesDashboardLiveTest = () => {
   }, [quotes]);
 
   return (
-    <div className="dashboard-container">
-      <h1 className="dashboard-title">My Quotes</h1>
+    <div className="dashboard-wrapper">
+      <div className="dashboard-container">
+        <h1 className="dashboard-title">My Quotes</h1>
 
-      {/* Filter Tabs */}
-      <div className="dashboard-tabs">
-        {["All", "Sent", "Viewed", "Signed", "Declined"].map((tab) => (
-          <button
-            key={tab}
-            className={`tab-button ${activeTab === tab ? "active" : ""}`}
-            onClick={() => setActiveTab(tab)}
-          >
-            {tab} {tabCounts[tab] !== undefined ? `(${tabCounts[tab]})` : ""}
-          </button>
-        ))}
-      </div>
-
-      {filteredQuotes.length === 0 ? (
-        <p>No quotes found for "{activeTab}".</p>
-      ) : (
-        <div className="quote-grid">
-          {filteredQuotes.map((q) => {
-            const s = normalize(q);
-            return (
-              <div key={q.id} className="quote-card-modern">
-                <div className="quote-card-header">
-                  <div>
-                    <h2 className="client-name">{q.client?.name || "Unnamed Client"}</h2>
-                    <p className="quote-meta">
-                      {q.location || "No location"}
-                      <br />
-                      {`${q.material || ""} ${q.series || ""} ${q.style || ""}`}
-                    </p>
-                  </div>
-                  <div
-                    className={`status-tag ${
-                      s.signed ? "signed" : s.declined ? "declined" : s.viewed ? "viewed" : "sent"
-                    }`}
-                  >
-                    {s.declined ? "Declined" : s.signed ? "Signed" : s.viewed ? "Viewed" : "Sent"}
-                  </div>
-                </div>
-
-                <div className="quote-card-body">
-                  <div className="total-display">
-                    <strong>Total:</strong> ${Number(q.total || 0).toLocaleString()}
-                  </div>
-                  <div className="button-group">
-                    <button onClick={() => handleView(q.id)} className="btn btn-view">
-                      View
-                    </button>
-                    <button onClick={() => handleResend(q)} className="btn btn-resend">
-                      Resend
-                    </button>
-                    <button onClick={() => handleEdit(q.id)} className="btn btn-edit">
-                      ✏️ Edit
-                    </button>
-                    <button onClick={() => handleDownload(q.id)} className="btn btn-download">
-                      Download
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+        {/* Filter Tabs */}
+        <div className="dashboard-tabs">
+          {["All", "Sent", "Viewed", "Signed", "Declined"].map((tab) => (
+            <button
+              key={tab}
+              className={`tab-button ${activeTab === tab ? "active" : ""}`}
+              onClick={() => setActiveTab(tab)}
+            >
+              {tab}{" "}
+              {tabCounts[tab] !== undefined ? `(${tabCounts[tab]})` : ""}
+            </button>
+          ))}
         </div>
-      )}
 
-      <ToastContainer position="top-right" autoClose={3500} />
+        {filteredQuotes.length === 0 ? (
+          <p>No quotes found for "{activeTab}".</p>
+        ) : (
+          <div className="quote-grid">
+            {filteredQuotes.map((q) => {
+              const s = normalize(q);
+              const statusClass = s.declined
+                ? "status-declined"
+                : s.signed
+                ? "status-signed"
+                : s.viewed
+                ? "status-viewed"
+                : "status-sent";
+
+              const statusLabel = s.declined
+                ? "Declined"
+                : s.signed
+                ? "Signed"
+                : s.viewed
+                ? "Viewed"
+                : "Sent";
+
+              return (
+                <div key={q.id} className="quote-card">
+                  <div className="quote-card-header">
+                    <div>
+                      <h2 className="quote-client-name">
+                        {q.client?.name || "Unnamed Client"}
+                      </h2>
+                      <p className="quote-meta">
+                        {q.location || "No location"}
+                        <br />
+                        {`${q.material || ""} ${q.series || ""} ${
+                          q.style || ""
+                        }`}
+                      </p>
+                    </div>
+                    <div className={`status-badge ${statusClass}`}>
+                      {statusLabel}
+                    </div>
+                  </div>
+
+                  <div className="quote-card-body">
+                    <div className="quote-total">
+                      ${Number(q.total || 0).toLocaleString()}
+                    </div>
+                    <div className="button-group">
+                      <button
+                        onClick={() => handleView(q.id)}
+                        className="btn btn-view"
+                      >
+                        View
+                      </button>
+                      <button
+                        onClick={() => handleResend(q)}
+                        className="btn btn-resend"
+                      >
+                        Resend
+                      </button>
+                      <button
+                        onClick={() => handleEdit(q.id)}
+                        className="btn btn-edit"
+                      >
+                        ✏️ Edit
+                      </button>
+                      <button
+                        onClick={() => handleDownload(q.id)}
+                        className="btn btn-download"
+                      >
+                        Download
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <ToastContainer position="top-right" autoClose={3500} />
+      </div>
     </div>
   );
 };

@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
-
 import {
   collection,
   addDoc,
@@ -10,20 +9,18 @@ import {
   doc,
   serverTimestamp,
   getDoc,
-  runTransaction,
 } from "firebase/firestore";
 import { auth, db } from "./firebaseConfig";
-
+import { signInAnonymously } from "firebase/auth";
+import UploadReadyQuote from "./components/UploadReadyQuote";
 import LineItem from "./LineItem";
 import valdicassLogo from "./assets/valdicass-logo.png";
 import greenskyLogo from "./assets/greensky-logo.jpeg";
 import "./EstimateForm.css";
 import usePricing from "./hooks/usePricing";
 import SaveQuotePdfButton from "./components/SaveQuotePdfButton";
-import SalesRepEditor from "./components/SalesRepEditor";
 
-/* ----------------------- helpers (single definitions) ---------------------- */
-
+/* ----------------------- helpers ---------------------- */
 function creatorFromUser(user) {
   return {
     createdBy: user?.uid || null,
@@ -32,14 +29,13 @@ function creatorFromUser(user) {
   };
 }
 
-// Get default “Prepared by” from auth + optional users/<uid> profile
 async function getDefaultPreparedBy() {
   const u = auth.currentUser;
   if (!u) return { uid: "", name: "Sales Representative", email: "", phone: "" };
-
+  
   let name = u.displayName || "";
   let phone = "";
-
+  
   try {
     const prof = await getDoc(doc(db, "users", u.uid));
     if (prof.exists()) {
@@ -52,59 +48,78 @@ async function getDefaultPreparedBy() {
   } catch {
     // ignore profile read errors
   }
-
-  return { uid: u.uid, name: name || "Sales Representative", email: u.email || "", phone };
+  
+  return { 
+    uid: u.uid, 
+    name: name || "Sales Representative", 
+    email: u.email || "", 
+    phone 
+  };
 }
 
 function makeQuoteDisplayName({ clientName, city, createdAt, total }) {
   const who = (clientName || "Customer").trim();
-  const when =
-    createdAt instanceof Date
-      ? createdAt
-      : createdAt?.toDate?.() instanceof Date
-      ? createdAt.toDate()
-      : new Date();
+  const when = createdAt instanceof Date
+    ? createdAt
+    : createdAt?.toDate?.() instanceof Date
+    ? createdAt.toDate()
+    : new Date();
   const whenStr = when.toLocaleDateString(undefined, { month: "short", day: "2-digit" });
   const loc = city ? ` • ${city}` : "";
-  const money =
-    Number.isFinite(Number(total)) ? ` — $${Number(total).toLocaleString()}` : "";
+  const money = Number.isFinite(Number(total)) ? ` — $${Number(total).toLocaleString()}` : "";
   return `${who}${loc} — ${whenStr}${money}`;
 }
 
-const fileSafe = (s = "") => s.replace(/[\\/:*?"<>|]+/g, "").trim().slice(0, 80);
+const extractQuoteId = (url) => {
+  try {
+    const u = new URL(url);
+    return u.searchParams.get("id") || "";
+  } catch {
+    return "";
+  }
+};
 
 /* -------------------------------- component -------------------------------- */
-
 export default function EstimateForm() {
   const navigate = useNavigate();
   const { pricingMap: pricing } = usePricing();
-
+  
   const [title, setTitle] = useState("");
   const [client, setClient] = useState({ name: "", address: "", clientEmail: "" });
   const [rooms, setRooms] = useState([]);
   const [subtotal, setSubtotal] = useState(0);
   const [tax, setTax] = useState(0);
   const [total, setTotal] = useState(0);
-
   const [preparedBy, setPreparedBy] = useState({ uid: "", name: "", email: "", phone: "" });
-
   const [isCheckout, setIsCheckout] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
   const [showShare, setShowShare] = useState(false);
   const [sending, setSending] = useState(false);
+  
+  const itemRefsMap = useRef({});
 
-  const itemRefsMap = useRef({}); // per-room item refs
+  // Computed value from shareUrl
+  const savedQuoteId = useMemo(() => extractQuoteId(shareUrl), [shareUrl]);
 
+  // Auth check
+  useEffect(() => {
+    if (!auth.currentUser) {
+      signInAnonymously(auth).catch(() => {});
+    }
+  }, []);
+
+  // Load prepared by info
   useEffect(() => {
     (async () => setPreparedBy(await getDefaultPreparedBy()))();
   }, []);
 
+  // Scroll to top on mount
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
+  // Scroll to last added item
   useEffect(() => {
-    // Scroll to last added item per room
     rooms.forEach((_, roomIndex) => {
       const itemRefs = itemRefsMap.current[roomIndex];
       if (itemRefs?.length) {
@@ -112,6 +127,20 @@ export default function EstimateForm() {
       }
     });
   }, [rooms]);
+
+  // Draft quote for preview
+  const draftQuote = useMemo(
+    () => ({
+      id: "DRAFT",
+      client: { ...client },
+      rooms,
+      subtotal: Number(subtotal || 0),
+      tax: Number(tax || 0),
+      total: Number(total || 0),
+      createdAt: new Date(),
+    }),
+    [client, rooms, subtotal, tax, total]
+  );
 
   const handleClientChange = (e) => {
     const { name, value } = e.target;
@@ -148,11 +177,10 @@ export default function EstimateForm() {
       alert("⚠️ Pricing not loaded yet.");
       return;
     }
-
+    
     const defaultMaterial = Object.keys(pricing)[0];
     const defaultSeries = Object.keys(pricing[defaultMaterial])[0];
     const defaultStyle = Object.keys(pricing[defaultMaterial][defaultSeries])[0];
-
     const basePrice = getPrice(pricing, {
       material: defaultMaterial,
       series: defaultSeries,
@@ -232,37 +260,26 @@ export default function EstimateForm() {
     calculateTotal();
   }, [rooms]);
 
-  // for client preview while draft
-  const draftQuote = useMemo(
-    () => ({
-      id: "DRAFT",
-      client: { ...client },
-      rooms,
-      subtotal: Number(subtotal || 0),
-      tax: Number(tax || 0),
-      total: Number(total || 0),
-      createdAt: new Date(),
-    }),
-    [client, rooms, subtotal, tax, total]
-  );
-
-  const extractQuoteId = (url) => {
+  // Function to persist display name
+  async function persistDisplayName(name) {
+    const n = (name || "").trim();
+    if (!savedQuoteId || !n) return;
     try {
-      const u = new URL(url);
-      return u.searchParams.get("id") || "";
-    } catch {
-      return "";
+      await updateDoc(doc(db, "quotes", savedQuoteId), { displayName: n });
+    } catch (e) {
+      console.warn("Failed to update displayName", e);
     }
-  };
+  }
 
   const saveQuoteToFirestore = async () => {
     setIsCheckout(true);
-
+    
     if (!auth?.currentUser) {
       alert("You must be logged in.");
       setIsCheckout(false);
       return;
     }
+    
     if (!client.name || !client.address || !client.clientEmail) {
       alert("❌ Please fill out all client info.");
       setIsCheckout(false);
@@ -273,21 +290,18 @@ export default function EstimateForm() {
       const user = auth.currentUser;
       const creator = creatorFromUser(user);
       const now = serverTimestamp();
-
-      const displayName =
-        (title || "").trim() ||
-        makeQuoteDisplayName({
-          clientName: client.name,
-          city: undefined,
-          total: Number(total || 0),
-        });
+      
+      const displayName = (title || "").trim() || makeQuoteDisplayName({
+        clientName: client.name,
+        city: undefined,
+        total: Number(total || 0),
+      });
 
       const quote = {
         displayName,
         ...creator,
         userId: user.uid,
         userEmail: user.email,
-
         client: { ...client },
         rooms: Array.isArray(rooms) ? rooms : [],
         subtotal: Number(subtotal || 0),
@@ -295,14 +309,11 @@ export default function EstimateForm() {
         total: Number(total || 0),
         createdAt: now,
         date: now,
-
         status: "draft",
         viewed: false,
         signed: false,
         declined: false,
         statusTimestamps: { sent: null, viewed: null, signed: null, declined: null },
-
-        // Rep info saved on the quote
         preparedBy,
         preparedByName: preparedBy.name || "",
         preparedByEmail: preparedBy.email || "",
@@ -310,18 +321,18 @@ export default function EstimateForm() {
       };
 
       const docRef = await addDoc(collection(db, "quotes"), quote);
-
+      
       const base = window.location.origin.includes("localhost")
         ? "http://localhost:3000"
         : "https://app.valdicass.com";
       const url = `${base}/view-quote?id=${docRef.id}`;
-
+      
       setShareUrl(url);
       setShowShare(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
       console.error("🔥 Save error:", error);
-      alert(`❌ Error: ${error.message}`);
+      alert(`❌ Error: ${error.message}`); // ✅ FIXED
     } finally {
       setIsCheckout(false);
     }
@@ -329,6 +340,7 @@ export default function EstimateForm() {
 
   const sendQuoteEmail = async () => {
     const quoteId = extractQuoteId(shareUrl);
+    
     const payload = {
       quoteId,
       clientEmail: (client.clientEmail || "").trim(),
@@ -345,8 +357,9 @@ export default function EstimateForm() {
     if (!payload.clientName) missing.push("clientName");
     if (!Number.isFinite(payload.total)) missing.push("total");
     if (!payload.shareUrl) missing.push("shareUrl");
+
     if (missing.length) {
-      alert(`Missing fields: ${missing.join(", ")}`);
+      alert(`Missing fields: ${missing.join(", ")}`); // ✅ FIXED
       return;
     }
 
@@ -357,12 +370,15 @@ export default function EstimateForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      
       const json = await res.json().catch(() => ({}));
+      
       if (!res.ok || !json?.ok) {
         throw new Error(json?.error || `Failed with ${res.status}`);
       }
+      
       alert("✅ Email sent to client!");
-
+      
       try {
         await updateDoc(doc(db, "quotes", quoteId), {
           status: "sent",
@@ -385,49 +401,50 @@ export default function EstimateForm() {
     }
   };
 
-  const savedQuoteId = useMemo(() => extractQuoteId(shareUrl), [shareUrl]);
-
   /* ---------------------------------- UI ---------------------------------- */
-
   return (
     <div className="px-4 py-6 bg-gray-100">
       <div className="estimate-container max-w-5xl mx-auto bg-white p-6 rounded shadow-md">
         <img src={valdicassLogo} alt="Valdicass Logo" className="valdicass-header-logo" />
 
-       {/* Sales Representative */}
-<div className="mb-4 border rounded-xl p-4">
-  <div className="text-sm font-semibold text-slate-700 mb-2">Sales Representative</div>
+        {/* Sales Representative */}
+        <div className="mb-4 border rounded-xl p-4">
+          <div className="text-sm font-semibold text-slate-700 mb-2">Sales Representative</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <label className="text-xs font-medium text-slate-500">
+              Email
+              <input
+                type="email"
+                name="preparedByEmail"
+                className="mt-1 w-full h-10 rounded-lg border border-slate-200 px-3"
+                value={preparedBy.email ?? ""}
+                onChange={(e) => setPreparedBy((p) => ({ ...p, email: e.target.value }))}
+                placeholder="name@valdicass.com"
+                autoComplete="email"
+              />
+            </label>
+            <label className="text-xs font-medium text-slate-500">
+              Phone
+              <input
+                name="preparedByPhone"
+                className="mt-1 w-full h-10 rounded-lg border border-slate-200 px-3"
+                value={preparedBy.phone ?? ""}
+                onChange={(e) => setPreparedBy((p) => ({ ...p, phone: e.target.value }))}
+                placeholder="708-255-5231"
+                autoComplete="tel"
+              />
+            </label>
+          </div>
+        </div>
 
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-    <label className="text-xs font-medium text-slate-500">
-      Email
-      <input
-        type="email"
-        name="preparedByEmail"
-        className="mt-1 w-full h-10 rounded-lg border border-slate-200 px-3"
-        value={preparedBy.email ?? ""}
-        onChange={(e) => setPreparedBy((p) => ({ ...p, email: e.target.value }))}
-        placeholder="name@valdicass.com"
-        title="Sales rep email"
-        autoComplete="email"
-      />
-    </label>
-
-    <label className="text-xs font-medium text-slate-500">
-      Phone
-      <input
-        name="preparedByPhone"
-        className="mt-1 w-full h-10 rounded-lg border border-slate-200 px-3"
-        value={preparedBy.phone ?? ""}
-        onChange={(e) => setPreparedBy((p) => ({ ...p, phone: e.target.value }))}
-        placeholder="708-255-5231"
-        title="Sales rep phone"
-        autoComplete="tel"
-      />
-    </label>
-  </div>
-</div>
-
+        <UploadReadyQuote
+          initialName={title}
+          onDone={({ quoteId, shareUrl }) => {
+            setShareUrl(shareUrl);
+            setShowShare(true);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+        />
 
         {showShare && (
           <div
@@ -472,7 +489,6 @@ export default function EstimateForm() {
               >
                 {sending ? "Sending…" : "Send to Client"}
               </button>
-
               {savedQuoteId && (
                 <SaveQuotePdfButton
                   quote={{ id: savedQuoteId, ...draftQuote }}
@@ -480,8 +496,10 @@ export default function EstimateForm() {
                   onSaved={(url) => console.log("Saved PDF URL:", url)}
                 />
               )}
-
-              <button onClick={() => navigate("/dashboard")} className="bg-black text-white px-4 py-2 rounded">
+              <button 
+                onClick={() => navigate("/dashboard")} 
+                className="bg-black text-white px-4 py-2 rounded"
+              >
                 Go to Dashboard
               </button>
             </div>
@@ -495,6 +513,7 @@ export default function EstimateForm() {
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            onBlur={(e) => persistDisplayName(e.target.value)}
             placeholder="e.g., Skura Residence — Window Replacement"
             className="w-full"
           />
@@ -515,8 +534,6 @@ export default function EstimateForm() {
         {/* Rooms */}
         {rooms.map((room, roomIndex) => {
           itemRefsMap.current[roomIndex] = itemRefsMap.current[roomIndex] || [];
-          const itemRefs = (itemRefsMap.current[roomIndex] = []);
-
           return (
             <div key={roomIndex} className="mt-6 p-4 bg-gray-50 rounded border">
               <input
@@ -526,7 +543,7 @@ export default function EstimateForm() {
                 className="mb-2"
               />
               <div className="text-sm text-gray-400 mb-2">↕️ Drag to reorder</div>
-
+              
               <DragDropContext onDragEnd={(result) => handleDragEnd(result, roomIndex)}>
                 <Droppable droppableId={`room-${roomIndex}`}>
                   {(provided) => (
@@ -597,32 +614,5 @@ export default function EstimateForm() {
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 

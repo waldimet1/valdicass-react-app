@@ -1,95 +1,67 @@
 // api/_lib/firebaseAdmin.js
-import { getApps, initializeApp, cert } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
-import { getStorage } from "firebase-admin/storage";
-import admin from "firebase-admin";
+import { initializeApp, getApps, getApp, cert, applicationDefault } from 'firebase-admin/app';
+import { getStorage } from 'firebase-admin/storage';
+import { getFirestore } from 'firebase-admin/firestore';
 
-let app;
-if (!admin.apps.length) {
-  // Prefer base64 env, fallback to raw JSON
-  const json =
-    process.env.FIREBASE_ADMIN_JSON_BASE64
-      ? JSON.parse(
-          Buffer.from(
-            process.env.FIREBASE_ADMIN_JSON_BASE64,
-            "base64"
-          ).toString("utf8")
-        )
-      : JSON.parse(process.env.FIREBASE_ADMIN_JSON || "{}");
+function buildCredential() {
+  // Option A: individual env vars (recommended)
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  let privateKey = process.env.FIREBASE_PRIVATE_KEY;
 
-  app = admin.initializeApp({
-    credential: admin.credential.cert(json),
-    storageBucket:
-      process.env.STORAGE_BUCKET ||
-      process.env.VITE_STORAGE_BUCKET ||
-      process.env.VITE_FIREBASE_STORAGE_BUCKET,
-  });
-} else {
-  app = admin.app();
-}
-
-const bucket = admin.storage().bucket();
-
-export { admin, bucket };
-
-function loadServiceAccount() {
-  const b64 = process.env.FIREBASE_ADMIN_JSON_BASE64;
-  const raw = process.env.FIREBASE_ADMIN_JSON; // optional single-line JSON
-
-  if (b64) {
-    const json = Buffer.from(b64, "base64").toString("utf8");
-    try {
-      return JSON.parse(json);
-    } catch (e) {
-      throw new Error(
-        "FIREBASE_ADMIN_JSON_BASE64 is not valid base64 JSON (" + e.message + ")"
-      );
-    }
+  if (privateKey) {
+    // Convert escaped newlines to real newlines
+    privateKey = privateKey.replace(/\\n/g, '\n');
   }
 
+  if (projectId && clientEmail && privateKey) {
+    return cert({ projectId, clientEmail, privateKey });
+  }
+
+  // Option B: whole JSON in one var (string or base64)
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
   if (raw) {
+    const tryParse = (s) => {
+      const j = JSON.parse(s);
+      if (j.private_key && j.private_key.includes('\\n')) {
+        j.private_key = j.private_key.replace(/\\n/g, '\n');
+      }
+      return j;
+    };
+
     try {
-      return JSON.parse(raw);
-    } catch (e) {
-      throw new Error(
-        "FIREBASE_ADMIN_JSON must be single-line JSON (use JSON.stringify). " +
-          e.message
-      );
+      return cert(tryParse(raw));
+    } catch {
+      try {
+        const decoded = Buffer.from(raw, 'base64').toString('utf8');
+        return cert(tryParse(decoded));
+      } catch {
+        // fall through
+      }
     }
   }
 
-  throw new Error(
-    "Missing credentials. Set FIREBASE_ADMIN_JSON_BASE64 in Vercel env."
-  );
+  // Last resort (usually not present on Vercel)
+  return applicationDefault();
 }
 
-function init() {
-  if (!getApps().length) {
-    const creds = loadServiceAccount();
+const app =
+  getApps().length
+    ? getApp()
+    : initializeApp({
+        credential: buildCredential(),
+        storageBucket:
+          process.env.FIREBASE_STORAGE_BUCKET ||
+          `${process.env.FIREBASE_PROJECT_ID || ''}.appspot.com`,
+      });
 
-    const storageBucket =
-      process.env.VITE_STORAGE_BUCKET ||
-      process.env.VITE_FIREBASE_STORAGE_BUCKET ||
-      process.env.FIREBASE_STORAGE_BUCKET ||
-      undefined;
+// Optional: export helpers if you want to import them elsewhere
+export default app;
+export const adminStorage = () => getStorage(app);
+export const adminDb = () => getFirestore(app);
 
-    initializeApp({
-      credential: cert(creds),
-      ...(storageBucket ? { storageBucket } : {}),
-    });
-  }
-}
 
-init();
 
-export const adminDb = getFirestore();
-export const adminBucket = (() => {
-  try {
-    return getStorage().bucket();
-  } catch {
-    return null;
-  }
-})();
 
 
 
