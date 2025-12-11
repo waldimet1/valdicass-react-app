@@ -403,7 +403,7 @@ const handleSave = async (status = 'draft') => {
         };
 
         // Call Vercel API endpoint
-        const emailResponse = await fetch('https://valdicass-react-app.vercel.app/api/send-quote', {
+        const emailResponse = await fetch('/api/send-quote', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
