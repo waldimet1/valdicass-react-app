@@ -8,7 +8,7 @@ import "react-toastify/dist/ReactToastify.css";
 import { auth, db } from "../firebaseConfig";
 
 const ADMIN_UID = "REuTGQ98bAM0riY9xidS8fW6obl2";
-const API_BASE = "https://valdicass-sendquote-api.vercel.app";
+const API_BASE = "https://api.vercel.app";
 
 const QuoteDashboardModern = () => {
   const [user, setUser] = useState(null);

@@ -4,6 +4,60 @@ import { auth, db } from '../firebaseConfig';
 import { collection, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import '../styles/NewEstimate.css';
 
+// ============================================
+// AUTO-FILL HELPERS
+// ============================================
+
+/**
+ * Generate Estimate Number from customer name and phone
+ * Format: Initials-7DigitPhone
+ * Example: "John Doe" + "(555) 123-4567" = "JD-5551234"
+ */
+const generateEstimateNumber = (clientName, clientPhone) => {
+  if (!clientName || !clientPhone) return '';
+
+  // Get initials from name
+  const nameParts = clientName.trim().split(' ').filter(Boolean);
+  const initials = nameParts
+    .map(part => part.charAt(0).toUpperCase())
+    .join('');
+
+  // Extract digits from phone (remove all non-digit characters)
+  const phoneDigits = clientPhone.replace(/\D/g, '');
+
+  // Get last 7 digits of phone
+  const last7Digits = phoneDigits.slice(-7);
+
+  // Format: INITIALS-7DIGITS
+  return `${initials}-${last7Digits}`;
+};
+
+/**
+ * Extract PO Number from address (just the street number)
+ * Example: "3647 McCormick Ave" = "3647"
+ */
+const generatePONumber = (address) => {
+  if (!address) return '';
+
+  // Extract first number from address
+  const match = address.trim().match(/^\d+/);
+  return match ? match[0] : '';
+};
+
+/**
+ * Calculate Expiration Date (15 days from quote date)
+ * Returns ISO date string (YYYY-MM-DD)
+ */
+const calculateExpirationDate = (quoteDate) => {
+  if (!quoteDate) return '';
+
+  const date = new Date(quoteDate);
+  date.setDate(date.getDate() + 15);
+
+  // Return in YYYY-MM-DD format for input[type="date"]
+  return date.toISOString().split('T')[0];
+};
+
 const NewEstimate = () => {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -14,10 +68,13 @@ const NewEstimate = () => {
   const [saving, setSaving] = useState(false);
   const ADMIN_UID = "REuTGQ98bAM0riY9xidS8fW6obl2";
 
+  // Initialize date + expiration based on today
+  const todayStr = new Date().toISOString().split('T')[0];
+
   const [formData, setFormData] = useState({
     estimateNumber: '',
-    date: new Date().toISOString().split('T')[0],
-    expirationDate: '',
+    date: todayStr,
+    expirationDate: calculateExpirationDate(todayStr),
     poNumber: '',
     
     // Salesperson info (auto-filled)
@@ -158,7 +215,6 @@ QUALITY ASSURANCE:
 
   useEffect(() => {
     loadClients();
-    generateEstimateNumber();
     
     // Check if we're loading a template
     if (location.state?.template) {
@@ -239,14 +295,7 @@ QUALITY ASSURANCE:
     }
   };
 
-  const generateEstimateNumber = () => {
-    const estimates = JSON.parse(localStorage.getItem('landscaping_estimates') || '[]');
-    const lastNumber = estimates.length > 0 
-      ? Math.max(...estimates.map(e => parseInt(e.estimateNumber.replace(/\D/g, '')) || 0))
-      : 0;
-    setFormData(prev => ({ ...prev, estimateNumber: `EST-${String(lastNumber + 1).padStart(5, '0')}` }));
-  };
-
+  // Generic change handler
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFormData(prev => ({
@@ -255,16 +304,61 @@ QUALITY ASSURANCE:
     }));
   };
 
-  const handleClientSelect = (clientId) => {
-    const client = clients.find(c => c.id === clientId);
-    if (client) {
+  // NEW: Handle date changes and auto-update expiration date
+  const handleDateChange = (e) => {
+    const newDate = e.target.value;
+    const newExpirationDate = calculateExpirationDate(newDate);
+    
+    setFormData(prev => ({
+      ...prev,
+      date: newDate,
+      expirationDate: newExpirationDate
+    }));
+  };
+
+  // NEW: Handle client selection + auto-fill fields
+  const handleClientChange = (e) => {
+    const clientId = e.target.value;
+    const selectedClient = clients.find(c => c.id === clientId);
+
+    if (selectedClient) {
+      const fullAddress = `${selectedClient.address || ''}, ${selectedClient.city || ''}, ${selectedClient.state || ''} ${selectedClient.zip || ''}`.trim();
+
+      // Auto-generate estimate number from name + phone
+      const autoEstimateNumber = generateEstimateNumber(
+        selectedClient.name,
+        selectedClient.phone
+      );
+      
+      // Auto-generate PO number from address
+      const autoPONumber = generatePONumber(selectedClient.address || fullAddress);
+      
+      // Auto-calculate expiration date (15 days from current estimate date)
+      const autoExpirationDate = calculateExpirationDate(formData.date);
+
       setFormData(prev => ({
         ...prev,
-        clientId: client.id,
-        clientName: client.name,
-        clientEmail: client.email,
-        clientPhone: client.phone,
-        clientAddress: `${client.address || ''}, ${client.city || ''}, ${client.state || ''} ${client.zip || ''}`.trim()
+        clientId: selectedClient.id,
+        clientName: selectedClient.name || '',
+        clientEmail: selectedClient.email || '',
+        clientPhone: selectedClient.phone || '',
+        clientAddress: fullAddress,
+        estimateNumber: autoEstimateNumber,
+        poNumber: autoPONumber,
+        expirationDate: autoExpirationDate
+      }));
+    } else {
+      // Clear client + auto-fields
+      setFormData(prev => ({
+        ...prev,
+        clientId: '',
+        clientName: '',
+        clientEmail: '',
+        clientPhone: '',
+        clientAddress: '',
+        estimateNumber: '',
+        poNumber: '',
+        expirationDate: calculateExpirationDate(prev.date)
       }));
     }
   };
@@ -354,88 +448,84 @@ QUALITY ASSURANCE:
     }));
   };
 
- // UPDATE YOUR handleSave FUNCTION IN NewEstimate.jsx
+  const handleSave = async (status = 'draft') => {
+    setSaving(true);
+    try {
+      // Prepare estimate data
+      const estimateData = {
+        ...formData,
+        status,
+        createdBy: currentUser?.uid || '',
+        createdByEmail: currentUser?.email || '',
+        updatedAt: serverTimestamp(),
+        ...(id ? {} : { createdAt: serverTimestamp() })
+      };
 
-// REPLACE YOUR handleSave FUNCTION IN NewEstimate.jsx WITH THIS:
-
-const handleSave = async (status = 'draft') => {
-  setSaving(true);
-  try {
-    // Prepare estimate data
-    const estimateData = {
-      ...formData,
-      status,
-      createdBy: currentUser?.uid || '',
-      createdByEmail: currentUser?.email || '',
-      updatedAt: serverTimestamp(),
-      ...(id ? {} : { createdAt: serverTimestamp() })
-    };
-
-    let savedId = id;
-    
-    // Save to Firestore
-    if (id) {
-      const estimateRef = doc(db, 'quotes', id);
-      await updateDoc(estimateRef, estimateData);
-      console.log('✅ Estimate updated:', id);
-    } else {
-      const docRef = await addDoc(collection(db, 'quotes'), estimateData);
-      savedId = docRef.id;
-      console.log('✅ New estimate created:', savedId);
-    }
-
-    // If sending to client, send email via SendGrid API
-    if (status === 'sent' && formData.clientEmail) {
-      try {
-        // Construct the share URL
-        const shareUrl = `${window.location.origin}/quote/${savedId}`;
-        
-        // Prepare email data
-        const emailPayload = {
-          quoteId: formData.estimateNumber,
-          clientEmail: formData.clientEmail,
-          clientName: formData.clientName,
-          total: formData.total,
-          shareUrl: shareUrl,
-          fromEmail: currentUser?.email || 'info@valdicass.com',
-          fromName: formData.salespersonName || currentUser?.displayName || 'Valdicass',
-          replyTo: currentUser?.email || 'info@valdicass.com'
-        };
-
-        // Call Vercel API endpoint
-        const emailResponse = await fetch('/api/send-quote', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(emailPayload)
-        });
-
-        if (emailResponse.ok) {
-          const result = await emailResponse.json();
-          console.log('✅ Email sent successfully from:', result.from);
-          alert('✅ Estimate saved and email sent successfully!');
-        } else {
-          const errorText = await emailResponse.text();
-          console.error('❌ Email send failed:', errorText);
-          alert(`⚠️ Estimate saved, but email failed to send: ${errorText}\n\nPlease send manually to the client.`);
-        }
-      } catch (emailError) {
-        console.error('❌ Email error:', emailError);
-        alert(`⚠️ Estimate saved, but email failed: ${emailError.message}\n\nPlease send manually to the client.`);
+      let savedId = id;
+      
+      // Save to Firestore
+      if (id) {
+        const estimateRef = doc(db, 'quotes', id);
+        await updateDoc(estimateRef, estimateData);
+        console.log('✅ Estimate updated:', id);
+      } else {
+        const docRef = await addDoc(collection(db, 'quotes'), estimateData);
+        savedId = docRef.id;
+        console.log('✅ New estimate created:', savedId);
       }
-    } else {
-      alert('✅ Estimate saved as draft successfully!');
-    }
 
-    navigate('/dashboard');
-  } catch (error) {
-    console.error('❌ Error saving estimate:', error);
-    alert(`❌ Error saving estimate: ${error.message}`);
-  } finally {
-    setSaving(false);
-  }
-};
+      // If sending to client, send email via SendGrid API
+      if (status === 'sent' && formData.clientEmail) {
+        try {
+          // Construct the share URL
+          const shareUrl = `${window.location.origin}/quote/${savedId}`;
+          
+          // Prepare email data
+          const emailPayload = {
+            quoteId: formData.estimateNumber,
+            clientEmail: formData.clientEmail,
+            clientName: formData.clientName,
+            total: formData.total,
+            shareUrl: shareUrl,
+            fromEmail: currentUser?.email || 'info@valdicass.com',
+            fromName: formData.salespersonName || currentUser?.displayName || 'Valdicass',
+            replyTo: currentUser?.email || 'info@valdicass.com'
+          };
+
+          // Call Vercel API endpoint
+          const emailResponse = await fetch('/api/send-quote', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(emailPayload)
+          });
+
+          if (emailResponse.ok) {
+            const result = await emailResponse.json();
+            console.log('✅ Email sent successfully from:', result.from);
+            alert('✅ Estimate saved and email sent successfully!');
+          } else {
+            const errorText = await emailResponse.text();
+            console.error('❌ Email send failed:', errorText);
+            alert(`⚠️ Estimate saved, but email failed to send: ${errorText}\n\nPlease send manually to the client.`);
+          }
+        } catch (emailError) {
+          console.error('❌ Email error:', emailError);
+          alert(`⚠️ Estimate saved, but email failed: ${emailError.message}\n\nPlease send manually to the client.`);
+        }
+      } else {
+        alert('✅ Estimate saved as draft successfully!');
+      }
+
+      navigate('/dashboard');
+    } catch (error) {
+      console.error('❌ Error saving estimate:', error);
+      alert(`❌ Error saving estimate: ${error.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-US', {
@@ -454,21 +544,21 @@ const handleSave = async (status = 'draft') => {
           </button>
           <div className="actions-right">
             <button 
-  className="btn-save-draft" 
-  onClick={() => handleSave('draft')}
-  disabled={saving}
-  style={{ opacity: saving ? 0.6 : 1, cursor: saving ? 'not-allowed' : 'pointer' }}
->
-  {saving ? '💾 Saving...' : 'Save as Draft'}
-</button>
-<button 
-  className="btn-save-send" 
-  onClick={() => handleSave('sent')}
-  disabled={saving}
-  style={{ opacity: saving ? 0.6 : 1, cursor: saving ? 'not-allowed' : 'pointer' }}
->
-  {saving ? '💾 Saving & Sending...' : 'Save & Send to Customer'}
-</button>
+              className="btn-save-draft" 
+              onClick={() => handleSave('draft')}
+              disabled={saving}
+              style={{ opacity: saving ? 0.6 : 1, cursor: saving ? 'not-allowed' : 'pointer' }}
+            >
+              {saving ? '💾 Saving...' : 'Save as Draft'}
+            </button>
+            <button 
+              className="btn-save-send" 
+              onClick={() => handleSave('sent')}
+              disabled={saving}
+              style={{ opacity: saving ? 0.6 : 1, cursor: saving ? 'not-allowed' : 'pointer' }}
+            >
+              {saving ? '💾 Saving & Sending...' : 'Save & Send to Customer'}
+            </button>
           </div>
         </div>
       </div>
@@ -510,7 +600,9 @@ const handleSave = async (status = 'draft') => {
                   type="text"
                   name="estimateNumber"
                   value={formData.estimateNumber}
-                  onChange={handleChange}
+                  readOnly
+                  className="auto-generated-field"
+                  placeholder="Auto-generated from client name + phone"
                 />
               </div>
               <div className="form-field">
@@ -519,7 +611,7 @@ const handleSave = async (status = 'draft') => {
                   type="date"
                   name="date"
                   value={formData.date}
-                  onChange={handleChange}
+                  onChange={handleDateChange}
                 />
               </div>
             </div>
@@ -530,7 +622,8 @@ const handleSave = async (status = 'draft') => {
                   type="date"
                   name="expirationDate"
                   value={formData.expirationDate}
-                  onChange={handleChange}
+                  readOnly
+                  className="auto-generated-field"
                 />
               </div>
               <div className="form-field">
@@ -539,7 +632,9 @@ const handleSave = async (status = 'draft') => {
                   type="text"
                   name="poNumber"
                   value={formData.poNumber}
-                  onChange={handleChange}
+                  readOnly
+                  className="auto-generated-field"
+                  placeholder="Auto-generated from address"
                 />
               </div>
             </div>
@@ -557,14 +652,28 @@ const handleSave = async (status = 'draft') => {
                 </div>
                 <button 
                   className="btn-change"
-                  onClick={() => setFormData(prev => ({ ...prev, clientId: '', clientName: '' }))}
+                  onClick={() => setFormData(prev => ({ 
+                    ...prev, 
+                    clientId: '', 
+                    clientName: '',
+                    clientEmail: '',
+                    clientPhone: '',
+                    clientAddress: '',
+                    estimateNumber: '',
+                    poNumber: '',
+                    expirationDate: calculateExpirationDate(prev.date)
+                  }))}
                 >
                   Change
                 </button>
               </div>
             ) : (
               <div className="client-picker">
-                <select onChange={(e) => handleClientSelect(e.target.value)} className="client-select">
+                <select
+                  value={formData.clientId || ''}
+                  onChange={handleClientChange}
+                  className="client-select"
+                >
                   <option value="">Select Client...</option>
                   {clients.map(client => (
                     <option key={client.id} value={client.id}>
@@ -579,28 +688,28 @@ const handleSave = async (status = 'draft') => {
             )}
           </div>
         </div>
-// REPLACE THE EMAIL BANNER IN NewEstimate.jsx WITH THIS:
 
-<div className="email-info-banner" style={{
-  padding: '15px 20px',
-  background: 'linear-gradient(135deg, #d1f2eb 0%, #a3e4d7 100%)',
-  border: '2px solid #00a651',
-  borderRadius: '8px',
-  margin: '20px 0',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '15px'
-}}>
-  <span style={{ fontSize: '32px' }}>📧</span>
-  <div>
-    <p style={{ margin: 0, fontWeight: 600, color: '#0d5c3e', fontSize: '14px' }}>
-      Automatic Email Notification
-    </p>
-    <p style={{ margin: '5px 0 0 0', color: '#0d5c3e', fontSize: '13px', lineHeight: '1.5' }}>
-      Clicking "Save & Send" will automatically send a professional email to the customer with a link to view their estimate online.
-    </p>
-  </div>
-</div>
+        <div className="email-info-banner" style={{
+          padding: '15px 20px',
+          background: 'linear-gradient(135deg, #d1f2eb 0%, #a3e4d7 100%)',
+          border: '2px solid #00a651',
+          borderRadius: '8px',
+          margin: '20px 0',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '15px'
+        }}>
+          <span style={{ fontSize: '32px' }}>📧</span>
+          <div>
+            <p style={{ margin: 0, fontWeight: 600, color: '#0d5c3e', fontSize: '14px' }}>
+              Automatic Email Notification
+            </p>
+            <p style={{ margin: '5px 0 0 0', color: '#0d5c3e', fontSize: '13px', lineHeight: '1.5' }}>
+              Clicking "Save & Send" will automatically send a professional email to the customer with a link to view their estimate online.
+            </p>
+          </div>
+        </div>
+
         {/* Line Items */}
         <div className="section">
           <h3>Items & Services</h3>
@@ -980,21 +1089,21 @@ const handleSave = async (status = 'draft') => {
         </button>
         <div className="actions-right">
           <button 
-  className="btn-save-draft" 
-  onClick={() => handleSave('draft')}
-  disabled={saving}
-  style={{ opacity: saving ? 0.6 : 1, cursor: saving ? 'not-allowed' : 'pointer' }}
->
-  {saving ? '💾 Saving...' : 'Save as Draft'}
-</button>
-<button 
-  className="btn-save-send" 
-  onClick={() => handleSave('sent')}
-  disabled={saving}
-  style={{ opacity: saving ? 0.6 : 1, cursor: saving ? 'not-allowed' : 'pointer' }}
->
-  {saving ? '💾 Saving & Sending...' : 'Save & Send to Customer'}
-</button>
+            className="btn-save-draft" 
+            onClick={() => handleSave('draft')}
+            disabled={saving}
+            style={{ opacity: saving ? 0.6 : 1, cursor: saving ? 'not-allowed' : 'pointer' }}
+          >
+            {saving ? '💾 Saving...' : 'Save as Draft'}
+          </button>
+          <button 
+            className="btn-save-send" 
+            onClick={() => handleSave('sent')}
+            disabled={saving}
+            style={{ opacity: saving ? 0.6 : 1, cursor: saving ? 'not-allowed' : 'pointer' }}
+          >
+            {saving ? '💾 Saving & Sending...' : 'Save & Send to Customer'}
+          </button>
         </div>
       </div>
     </div>
