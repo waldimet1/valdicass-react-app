@@ -31,6 +31,7 @@ import AppLayout from './AppLayout';
 import NewEstimate from './pages/NewEstimate';
 import Settings from './pages/Settings';
 import Templates from './pages/Templates';
+import Trash from './pages/Trash';
 
 // ADD THIS HELPER FUNCTION
 const withLayout = (Component, pageTitle) => {
@@ -126,6 +127,7 @@ export default function App() {
         <Route path="/estimate/edit/:id" element={requireAuth(withLayout(NewEstimate, "Edit Estimate"))} />
         <Route path="/templates" element={requireAuth(withLayout(Templates, "Templates"))} />
         <Route path="/new" element={<Navigate to="/estimate/new" replace />} />
+        <Route path="/trash" element={requireAuth(withLayout(Trash, "Trash"))} />
         {/* Optional legacy dashboards */}
         <Route path="/new" element={<Navigate to="/estimate/new" replace />} />
         <Route

@@ -1,0 +1,201 @@
+.trash-container {
+  padding: 40px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.trash-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.trash-header h1 {
+  font-size: 32px;
+  color: #2d3748;
+  margin: 0;
+}
+
+.btn-back {
+  padding: 10px 20px;
+  background: #4a5568;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+ transition: background 0.2s;
+}
+
+.btn-back:hover {
+  background: #2d3748;
+}
+
+.trash-loading {
+  text-align: center;
+  padding: 60px;
+  font-size: 18px;
+  color: #718096;
+}
+
+.trash-empty {
+  text-align: center;
+  padding: 80px 20px;
+  background: #f7fafc;
+  border-radius: 12px;
+  border: 2px dashed #cbd5e0;
+}
+
+.trash-empty p {
+  font-size: 24px;
+  color: #4a5568;
+  margin: 10px 0;
+}
+
+.trash-empty-subtitle {
+  font-size: 16px !important;
+  color: #718096 !important;
+}
+
+.trash-count {
+  font-size: 14px;
+  color: #718096;
+  margin-bottom: 20px;
+}
+
+.trash-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.trash-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.2s;
+}
+
+.trash-card:hover {
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.trash-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.trash-card-info h3 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+  color: #2d3748;
+}
+
+.trash-estimate-number {
+  font-size: 14px;
+  color: #718096;
+  margin: 0;
+}
+
+.trash-card-amount {
+  font-size: 24px;
+  font-weight: bold;
+  color: #dc3545;
+}
+
+.trash-card-details {
+  margin-bottom: 20px;
+}
+
+.trash-card-details p {
+  margin: 8px 0;
+  font-size: 14px;
+  color: #4a5568;
+}
+
+.trash-card-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.btn-restore {
+  flex: 1;
+  padding: 12px 24px;
+  background: #00a651;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.btn-restore:hover {
+  background: #008f45;
+}
+
+.btn-permanent-delete {
+  flex: 1;
+  padding: 12px 24px;
+  background: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.btn-permanent-delete:hover {
+  background: #c82333;
+}
+
+.trash-admin-notice {
+  margin-top: 30px;
+  padding: 16px;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 6px;
+}
+
+.trash-admin-notice p {
+  margin: 0;
+  color: #856404;
+  font-size: 14px;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .trash-container {
+    padding: 20px;
+  }
+
+  .trash-header {
+    flex-direction: column;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .trash-card-header {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .trash-card-actions {
+    flex-direction: column;
+  }
+
+  .btn-restore,
+  .btn-permanent-delete {
+    width: 100%;
+  }
+}

@@ -436,4 +436,19 @@
   .vd-actions {
     flex-wrap: wrap;
   }
+
+  .vd-btn-danger {
+  background-color: #dc3545;
+  color: #fff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.vd-btn-danger:hover {
+  background-color: #c82333;
+}
+
 }

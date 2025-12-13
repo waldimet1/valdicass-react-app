@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { auth, db } from '../firebaseConfig';
-import { collection, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc, serverTimestamp, deleteDoc } from 'firebase/firestore';
 import '../styles/NewEstimate.css';
+
+
 
 // ============================================
 // AUTO-FILL HELPERS
@@ -171,7 +173,12 @@ QUALITY ASSURANCE:
     financingEnabled: false,
     financingLink: '',
     
-    status: 'draft'
+    status: 'draft',
+
+   isArchived: false,
+  archivedAt: null,
+  archivedBy: '',
+  archivedByEmail: ''
   });
 
   // Monitor auth state and set salesperson info
@@ -526,6 +533,51 @@ QUALITY ASSURANCE:
       setSaving(false);
     }
   };
+const handleArchive = async () => {
+  if (!id) return;
+
+  const confirmed = window.confirm(
+    '⚠️ Move this estimate to Trash?\n\nIt will be hidden from your main dashboard but kept in the archive (Trash).'
+  );
+
+  if (!confirmed) return;
+
+  try {
+    setSaving(true);
+
+    const estimateRef = doc(db, 'quotes', id);
+
+    // Soft delete: mark as archived instead of deleting
+    await updateDoc(estimateRef, {
+      status: 'archived',
+      isArchived: true,
+      archivedAt: serverTimestamp(),
+      archivedBy: currentUser?.uid || '',
+      archivedByEmail: currentUser?.email || ''
+    });
+
+    // OPTIONAL: log this action in quoteLogs collection
+    await addDoc(collection(db, 'quoteLogs'), {
+      quoteId: id,
+      estimateNumber: formData.estimateNumber || '',
+      type: 'archived',
+      message: 'Estimate moved to Trash (soft delete)',
+      actorId: currentUser?.uid || '',
+      actorEmail: currentUser?.email || '',
+      createdAt: serverTimestamp()
+    });
+
+    console.log('🗂️ Estimate archived (soft delete):', id);
+    alert('✅ Estimate moved to Trash (archive).');
+    navigate('/dashboard');
+  } catch (error) {
+    console.error('❌ Error archiving estimate:', error);
+    alert(`❌ Error archiving estimate: ${error.message}`);
+  } finally {
+    setSaving(false);
+  }
+};
+
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-US', {
@@ -538,30 +590,53 @@ QUALITY ASSURANCE:
     <div className="estimate-container">
       {/* Header */}
       <div className="estimate-header">
-        <div className="estimate-actions">
-          <button className="btn-cancel" onClick={() => navigate('/dashboard')}>
-            Cancel
-          </button>
-          <div className="actions-right">
-            <button 
-              className="btn-save-draft" 
-              onClick={() => handleSave('draft')}
-              disabled={saving}
-              style={{ opacity: saving ? 0.6 : 1, cursor: saving ? 'not-allowed' : 'pointer' }}
-            >
-              {saving ? '💾 Saving...' : 'Save as Draft'}
-            </button>
-            <button 
-              className="btn-save-send" 
-              onClick={() => handleSave('sent')}
-              disabled={saving}
-              style={{ opacity: saving ? 0.6 : 1, cursor: saving ? 'not-allowed' : 'pointer' }}
-            >
-              {saving ? '💾 Saving & Sending...' : 'Save & Send to Customer'}
-            </button>
-          </div>
-        </div>
-      </div>
+  <div className="estimate-actions">
+    <button className="btn-cancel" onClick={() => navigate('/dashboard')}>
+      Cancel
+    </button>
+
+    {/* Only show Archive (Trash) button when editing an existing estimate */}
+    {id && (
+      <button
+        className="btn-delete-estimate"
+        onClick={handleArchive}
+        disabled={saving}
+        style={{
+          marginLeft: '10px',
+          backgroundColor: '#ff9800',
+          color: '#fff',
+          border: 'none',
+          padding: '8px 14px',
+          borderRadius: '4px',
+          cursor: saving ? 'not-allowed' : 'pointer',
+          opacity: saving ? 0.6 : 1
+        }}
+      >
+        {saving ? 'Archiving…' : 'Move to Trash'}
+      </button>
+    )}
+
+    <div className="actions-right">
+      <button 
+        className="btn-save-draft" 
+        onClick={() => handleSave('draft')}
+        disabled={saving}
+        style={{ opacity: saving ? 0.6 : 1, cursor: saving ? 'not-allowed' : 'pointer' }}
+      >
+        {saving ? '💾 Saving...' : 'Save as Draft'}
+      </button>
+      <button 
+        className="btn-save-send" 
+        onClick={() => handleSave('sent')}
+        disabled={saving}
+        style={{ opacity: saving ? 0.6 : 1, cursor: saving ? 'not-allowed' : 'pointer' }}
+      >
+        {saving ? '💾 Saving & Sending...' : 'Save & Send to Customer'}
+      </button>
+    </div>
+  </div>
+</div>
+
 
       {/* Main Content */}
       <div className="estimate-content">

@@ -1,5 +1,16 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { collection, query, where, orderBy, onSnapshot } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  doc,
+  updateDoc,
+  deleteDoc,
+  addDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 import { db, auth } from "./firebaseConfig";
 import { useNavigate, useLocation } from "react-router-dom";
 import "./SalesDashboard.css";
@@ -14,7 +25,7 @@ const SalesDashboard = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  
+
   const ADMIN_UID = "REuTGQ98bAM0riY9xidS8fW6obl2";
 
   // 🔐 Monitor auth state
@@ -43,31 +54,37 @@ const SalesDashboard = () => {
     setError(null);
 
     try {
-      // Admin sees all quotes, Salesperson sees only their own
       const q = isAdmin
-        ? query(collection(db, "quotes"), orderBy("createdAt", "desc"))
-        : query(
-            collection(db, "quotes"),
-            where("createdBy", "==", user.uid),
-            orderBy("createdAt", "desc")
-          );
+  ? query(
+      collection(db, "quotes"),
+      where("status", "!=", "deleted"),
+      orderBy("status"),
+      orderBy("createdAt", "desc")
+    )
+  : query(
+      collection(db, "quotes"),
+      where("createdBy", "==", user.uid),
+      where("status", "!=", "deleted"),
+      orderBy("status"),
+      orderBy("createdAt", "desc")
+    );
 
       const unsub = onSnapshot(
         q,
         (snapshot) => {
           console.log("📊 Firestore snapshot received:", snapshot.size, "documents");
-          
-          const data = snapshot.docs.map((doc) => {
-            const docData = doc.data();
+
+          const data = snapshot.docs.map((docSnap) => {
+            const docData = docSnap.data();
             return {
-              id: doc.id,
+              id: docSnap.id,
               ...docData,
             };
           });
-          
+
           setQuotes(data);
           setLoading(false);
-          
+
           const statusBreakdown = data.reduce((acc, q) => {
             const status = q.status || "NO_STATUS";
             acc[status] = (acc[status] || 0) + 1;
@@ -96,26 +113,42 @@ const SalesDashboard = () => {
     }
   }, [user, isAdmin]);
 
-  // 🔔 Calculate notifications
+  // 🔔 Notifications (ignore archived)
   const notifications = useMemo(() => {
-    const emailOpened = quotes.filter(q => q.emailOpened && !q.signed && !q.declined).length;
-    const signed = quotes.filter(q => q.signed).length;
-    const declined = quotes.filter(q => q.declined).length;
+    const activeQuotes = quotes.filter((q) => !q.isArchived && q.status !== "archived");
+    const emailOpened = activeQuotes.filter((q) => q.emailOpened && !q.signed && !q.declined).length;
+    const signed = activeQuotes.filter((q) => q.signed).length;
+    const declined = activeQuotes.filter((q) => q.declined).length;
     const total = emailOpened + signed + declined;
-    
+
     return { emailOpened, signed, declined, total };
   }, [quotes]);
 
-  // 🔎 Filter by status + search
+  // 🔎 Filter by status + search + archive state
   const filteredQuotes = useMemo(() => {
     return quotes.filter((q) => {
-      // Filter by status
-      if (statusFilter === "PENDING" && q.status !== "PENDING" && q.status !== "draft" && q.status !== "sent") return false;
+      const isDeleted = q.status === "deleted";
+const isArchived = q.isArchived || q.status === "archived";
+
+if (statusFilter === "TRASH") {
+  if (!isDeleted && !isArchived) return false; // only show deleted/archived
+} else {
+  if (isDeleted || isArchived) return false; // hide from normal views
+}
+
+      // Status filters
+      if (
+        statusFilter === "PENDING" &&
+        q.status !== "PENDING" &&
+        q.status !== "draft" &&
+        q.status !== "sent"
+      )
+        return false;
       if (statusFilter === "APPROVED" && !q.signed) return false;
       if (statusFilter === "DECLINED" && !q.declined) return false;
       if (statusFilter === "TEMPLATES" && !q.isTemplate) return false;
 
-      // Filter by search term
+      // Search
       if (!searchTerm) return true;
 
       const term = searchTerm.toLowerCase();
@@ -163,34 +196,6 @@ const SalesDashboard = () => {
     });
   };
 
-  const formatDate = (ts) => {
-  let date;
-  
-  // Handle Firestore Timestamp
-  if (ts && typeof ts.toDate === 'function') {
-    date = ts.toDate();
-  }
-  // Handle ISO string or timestamp
-  else if (ts) {
-    date = new Date(ts);
-  }
-  // Fallback to current date
-  else {
-    date = new Date();
-  }
-  
-  // Check if date is valid
-  if (isNaN(date.getTime())) {
-    return 'Invalid Date';
-  }
-  
-  return date.toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-};
-
   const formatDateShort = (ts) => {
     let date;
     if (ts?.toDate) date = ts.toDate();
@@ -208,6 +213,8 @@ const SalesDashboard = () => {
     list.reduce((sum, q) => sum + (Number(q.total) || 0), 0);
 
   const getStatusBadge = (q) => {
+    if (q.isArchived || q.status === "archived")
+      return { text: "ARCHIVED", color: "#6c757d" };
     if (q.signed) return { text: "SIGNED", color: "#28a745" };
     if (q.declined) return { text: "DECLINED", color: "#dc3545" };
     if (q.status === "sent") return { text: "ISSUED", color: "#ffc107" };
@@ -226,11 +233,132 @@ const SalesDashboard = () => {
   };
 
   const handleEdit = (estimateId) => {
-  navigate(`/estimate/edit/${estimateId}`);
+    navigate(`/estimate/edit/${estimateId}`);
+  };
+
+  // 🗂 Move to Trash (soft delete) from dashboard
+  const handleArchiveFromDashboard = async (quote) => {
+    const confirmed = window.confirm(
+      "Move this estimate to Trash?\n\nIt will be hidden from your main dashboard but kept in the archive."
+    );
+    if (!confirmed) return;
+
+    try {
+      const ref = doc(db, "quotes", quote.id);
+      await updateDoc(ref, {
+        isArchived: true,
+        status: "archived",
+        archivedAt: serverTimestamp(),
+        archivedBy: user?.uid || "",
+        archivedByEmail: user?.email || "",
+      });
+
+      await addDoc(collection(db, "quoteLogs"), {
+        quoteId: quote.id,
+        estimateNumber: quote.estimateNumber || "",
+        type: "archived",
+        message: "Estimate moved to Trash from dashboard",
+        actorId: user?.uid || "",
+        actorEmail: user?.email || "",
+        createdAt: serverTimestamp(),
+      });
+
+      console.log("🗂️ Estimate archived from dashboard:", quote.id);
+    } catch (err) {
+      console.error("❌ Error archiving estimate:", err);
+      alert(`❌ Error moving to Trash: ${err.message}`);
+    }
+  };
+const handleDeleteForever = async (quote) => {
+  if (!isAdmin) {
+    alert('❌ Only admins can permanently delete estimates');
+    return;
+  }
+  
+  const confirmMessage = `⚠️ PERMANENT DELETE\n\nThis will permanently delete estimate ${quote.estimateNumber || quote.id}.\n\nThis action CANNOT be undone!\n\nType "DELETE" to confirm:`;
+  const userInput = prompt(confirmMessage);
+  
+  if (userInput !== 'DELETE') {
+    alert('Deletion cancelled');
+    return;
+  }
+  
+  try {
+    await deleteDoc(doc(db, 'quotes', quote.id));
+    
+    await addDoc(collection(db, 'quoteLogs'), {
+      quoteId: quote.id,
+      estimateNumber: quote.estimateNumber || '',
+      type: 'permanently_deleted',
+      message: 'Estimate permanently deleted',
+      actorId: user?.uid || '',
+      actorEmail: user?.email || '',
+      createdAt: serverTimestamp(),
+    });
+    
+    console.log('💀 Estimate permanently deleted:', quote.id);
+    alert('✅ Estimate permanently deleted');
+  } catch (err) {
+    console.error('❌ Error permanently deleting:', err);
+    alert(`❌ Error: ${err.message}`);
+  }
+};
+  // ♻️ Restore from Trash
+  const handleRestore = async (quote) => {
+    const confirmed = window.confirm(
+      "Restore this estimate from Trash?\n\nIt will reappear in your active estimates."
+    );
+    if (!confirmed) return;
+
+    try {
+      const ref = doc(db, "quotes", quote.id);
+      await updateDoc(ref, {
+        isArchived: false,
+        status: quote.status && quote.status !== "archived" ? quote.status : "draft",
+        archivedAt: null,
+        archivedBy: "",
+        archivedByEmail: "",
+      });
+
+      await addDoc(collection(db, "quoteLogs"), {
+        quoteId: quote.id,
+        estimateNumber: quote.estimateNumber || "",
+        type: "restored",
+        message: "Estimate restored from Trash",
+        actorId: user?.uid || "",
+        actorEmail: user?.email || "",
+        createdAt: serverTimestamp(),
+      });
+
+      console.log("♻️ Estimate restored:", quote.id);
+      alert("✅ Estimate restored from Trash.");
+    } catch (err) {
+      console.error("❌ Error restoring estimate:", err);
+      alert(`❌ Error restoring estimate: ${err.message}`);
+    }
+  };
+
+  // 💀 Permanently delete (admin only)
+  const handleDelete = async (quote) => {
+  if (!window.confirm('Move this estimate to trash?')) return;
+  
+  try {
+    const estimateRef = doc(db, 'quotes', quote.id);
+    await updateDoc(estimateRef, {
+      status: 'deleted',
+      deletedAt: serverTimestamp(),
+      deletedBy: user?.uid,
+      deletedByEmail: user?.email
+    });
+    
+    console.log('✅ Estimate moved to trash:', quote.id);
+  } catch (error) {
+    console.error('❌ Error deleting estimate:', error);
+    alert('❌ Failed to delete estimate: ' + error.message);
+  }
 };
 
   const currentUserName = user?.displayName || user?.email || "User";
-
   const isActive = (path) => location.pathname === path;
 
   // 🎨 LOADING STATE
@@ -274,11 +402,11 @@ const SalesDashboard = () => {
         </div>
 
         <div className="vd-main-content">
-          <h1 className="vd-page-title">Estimates</h1>
+          <h1 className="vd-page-title">Estimates (NEW)</h1>
+
         </div>
 
         <div className="vd-header-right">
-          {/* Notification Bell */}
           <div className="vd-notification-bell" onClick={() => navigate("/activity")}>
             🔔
             {notifications.total > 0 && (
@@ -286,7 +414,6 @@ const SalesDashboard = () => {
             )}
           </div>
 
-          {/* User Menu */}
           <div className="vd-user-menu">
             <div className="vd-user-avatar">
               {currentUserName.charAt(0).toUpperCase()}
@@ -302,34 +429,64 @@ const SalesDashboard = () => {
       {/* SIDEBAR */}
       <div className="vd-sidebar">
         <ul>
-          <li onClick={() => navigate("/dashboard")} className={isActive("/dashboard") ? "active" : ""}>
+          <li
+            onClick={() => navigate("/dashboard")}
+            className={isActive("/dashboard") ? "active" : ""}
+          >
             <span className="vd-sidebar-icon">📊</span> Estimates
           </li>
-          <li onClick={() => navigate("/schedule")} className={isActive("/schedule") ? "active" : ""}>
+          <li
+            onClick={() => navigate("/schedule")}
+            className={isActive("/schedule") ? "active" : ""}
+          >
             <span className="vd-sidebar-icon">📅</span> Schedule
           </li>
-          <li onClick={() => navigate("/invoices")} className={isActive("/invoices") ? "active" : ""}>
+          <li
+            onClick={() => navigate("/invoices")}
+            className={isActive("/invoices") ? "active" : ""}
+          >
             <span className="vd-sidebar-icon">📄</span> Invoices
           </li>
-          <li onClick={() => navigate("/clients")} className={isActive("/clients") ? "active" : ""}>
+          <li
+            onClick={() => navigate("/clients")}
+            className={isActive("/clients") ? "active" : ""}
+          >
             <span className="vd-sidebar-icon">👥</span> Clients
           </li>
-          <li onClick={() => navigate("/items")} className={isActive("/items") ? "active" : ""}>
+          <li
+            onClick={() => navigate("/items")}
+            className={isActive("/items") ? "active" : ""}
+          >
             <span className="vd-sidebar-icon">📦</span> Items
           </li>
-          <li onClick={() => navigate("/valdicass-pro")} className={isActive("/valdicass-pro") ? "active" : ""}>
+          <li
+            onClick={() => navigate("/valdicass-pro")}
+            className={isActive("/valdicass-pro") ? "active" : ""}
+          >
             <span className="vd-sidebar-icon">⭐</span> VC Pro
           </li>
-          <li onClick={() => navigate("/project-google-reviews")} className={isActive("/project-google-reviews") ? "active" : ""}>
+          <li
+            onClick={() => navigate("/project-google-reviews")}
+            className={isActive("/project-google-reviews") ? "active" : ""}
+          >
             <span className="vd-sidebar-icon">⭐</span> Collect Google Reviews
           </li>
-          <li onClick={() => navigate("/payments")} className={isActive("/payments") ? "active" : ""}>
+          <li
+            onClick={() => navigate("/payments")}
+            className={isActive("/payments") ? "active" : ""}
+          >
             <span className="vd-sidebar-icon">💳</span> Payments
           </li>
-          <li onClick={() => navigate("/reports")} className={isActive("/reports") ? "active" : ""}>
+          <li
+            onClick={() => navigate("/reports")}
+            className={isActive("/reports") ? "active" : ""}
+          >
             <span className="vd-sidebar-icon">📈</span> Reports
           </li>
-          <li onClick={() => navigate("/settings")} className={isActive("/settings") ? "active" : ""}>
+          <li
+            onClick={() => navigate("/settings")}
+            className={isActive("/settings") ? "active" : ""}
+          >
             <span className="vd-sidebar-icon">⚙️</span> Settings
           </li>
         </ul>
@@ -337,9 +494,8 @@ const SalesDashboard = () => {
 
       {/* MAIN CONTENT */}
       <div className="vd-main">
-        {/* SEARCH & ACTIONS - UPDATED TO SINGLE ROW */}
+        {/* SEARCH & ACTIONS */}
         <div className="dashboard-actions-bar">
-          {/* Search on the left */}
           <div className="dashboard-search">
             <input
               type="text"
@@ -349,12 +505,11 @@ const SalesDashboard = () => {
             />
           </div>
 
-          {/* Buttons on the right */}
           <div className="dashboard-action-buttons">
             <button className="btn-export">Export</button>
-            <button className="btn-template" onClick={() => navigate('/templates')}>
-  Use Template <span className="pro-badge">PRO</span>
-</button>
+            <button className="btn-template" onClick={() => navigate("/templates")}>
+              Use Template <span className="pro-badge">PRO</span>
+            </button>
             <button
               className="btn-new-estimate"
               onClick={() => navigate("/estimate/new")}
@@ -384,6 +539,12 @@ const SalesDashboard = () => {
           >
             DECLINED
           </div>
+          <div
+            className={`vd-tab ${statusFilter === "TRASH" ? "active" : ""}`}
+            onClick={() => setStatusFilter("TRASH")}
+          >
+            TRASH
+          </div>
         </div>
 
         {/* ESTIMATES LIST */}
@@ -391,7 +552,9 @@ const SalesDashboard = () => {
           <div className="vd-month-section" key={monthLabel}>
             <div className="vd-month-header">
               <h2>{monthLabel}</h2>
-              <div className="vd-month-total">Total: {formatCurrency(getMonthlyTotal(monthQuotes))}</div>
+              <div className="vd-month-total">
+                Total: {formatCurrency(getMonthlyTotal(monthQuotes))}
+              </div>
             </div>
 
             {monthQuotes.map((q) => {
@@ -409,12 +572,16 @@ const SalesDashboard = () => {
                     <div className="vd-estimate-title">
                       <strong>{clientName}</strong> - #{q.estimateNumber || q.id.slice(0, 6)}
                     </div>
-                    <div className="vd-estimate-amount">{formatCurrency(q.total)}</div>
+                    <div className="vd-estimate-amount">
+                      {formatCurrency(q.total)}
+                    </div>
                   </div>
 
                   <div className="vd-estimate-body">
                     <div className="vd-estimate-left">
-                      <div className="vd-estimate-date">{formatDateShort(q.createdAt)}</div>
+                      <div className="vd-estimate-date">
+                        {formatDateShort(q.createdAt)}
+                      </div>
                       <div
                         className="vd-estimate-status"
                         style={{ background: statusBadge.color }}
@@ -446,12 +613,45 @@ const SalesDashboard = () => {
                         </div>
                       )}
                       <div className="vd-estimate-actions">
-                        <button className="vd-btn-outline" onClick={() => handleView(q.id)}>
-                          Open
-                        </button>
-                        <button className="vd-btn-secondary" onClick={() => handleEdit(q.id)}>
-                          ✏️ Edit
-                        </button>
+                        {statusFilter === "TRASH" ? (
+                          <>
+                            <button
+                              className="vd-btn-outline"
+                              onClick={() => handleRestore(q)}
+                            >
+                              ♻️ Restore
+                            </button>
+                            {isAdmin && (
+                              <button
+                                className="vd-btn-danger"
+                                onClick={() => handleDeleteForever(q)}
+                              >
+                                🗑️ Delete Forever
+                              </button>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              className="vd-btn-outline"
+                              onClick={() => handleView(q.id)}
+                            >
+                              Open
+                            </button>
+                            <button
+                              className="vd-btn-secondary"
+                              onClick={() => handleEdit(q.id)}
+                            >
+                              ✏️ Edit
+                            </button>
+                            <button
+                              className="vd-btn-danger"
+                              onClick={() => handleArchiveFromDashboard(q)}
+                            >
+                              🗂 Move to Trash
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -463,14 +663,22 @@ const SalesDashboard = () => {
 
         {filteredQuotes.length === 0 && (
           <div className="vd-empty-state">
-            <h3>No {statusFilter.toLowerCase()} estimates found</h3>
-            <p>Try selecting a different tab or create your first estimate.</p>
-            <button
-              className="vd-btn vd-btn-primary"
-              onClick={() => navigate("/estimate/new")}
-            >
-              Create Your First Estimate
-            </button>
+            <h3>
+              {statusFilter === "TRASH"
+                ? "No estimates in Trash"
+                : `No ${statusFilter.toLowerCase()} estimates found`}
+            </h3>
+            {statusFilter !== "TRASH" && (
+              <>
+                <p>Try selecting a different tab or create your first estimate.</p>
+                <button
+                  className="vd-btn vd-btn-primary"
+                  onClick={() => navigate("/estimate/new")}
+                >
+                  Create Your First Estimate
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>

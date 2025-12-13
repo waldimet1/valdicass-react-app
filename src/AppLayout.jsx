@@ -90,7 +90,10 @@ const AppLayout = ({ children, pageTitle = "Dashboard" }) => {
           </li>
         </ul>
       </div>
-
+      <Link to="/trash" className={location.pathname === '/trash' ? 'active' : ''}>
+  <span className="nav-icon">🗑️</span>
+  <span>Trash</span>
+</Link>
       {/* MAIN CONTENT */}
       <div className="vd-main">
         {children}
