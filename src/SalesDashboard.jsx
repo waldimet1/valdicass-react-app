@@ -402,7 +402,7 @@ const handleDeleteForever = async (quote) => {
         </div>
 
         <div className="vd-main-content">
-          <h1 className="vd-page-title">Estimates (NEW)</h1>
+          <h1 className="vd-page-title">Estimates</h1>
 
         </div>
 

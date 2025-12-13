@@ -3,7 +3,6 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { auth } from './firebaseConfig';
 import './SalesDashboard.css';
 
-
 const AppLayout = ({ children, pageTitle = "Dashboard" }) => {
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -58,42 +57,76 @@ const AppLayout = ({ children, pageTitle = "Dashboard" }) => {
       {/* SIDEBAR */}
       <div className="vd-sidebar">
         <ul>
-          <li onClick={() => navigate("/dashboard")} className={isActive("/dashboard") ? "active" : ""}>
+          <li
+            onClick={() => navigate("/dashboard")}
+            className={isActive("/dashboard") ? "active" : ""}
+          >
             <span className="vd-sidebar-icon">📊</span> Estimates
           </li>
-          <li onClick={() => navigate("/schedule")} className={isActive("/schedule") ? "active" : ""}>
+          <li
+            onClick={() => navigate("/schedule")}
+            className={isActive("/schedule") ? "active" : ""}
+          >
             <span className="vd-sidebar-icon">📅</span> Schedule
           </li>
-          <li onClick={() => navigate("/invoices")} className={isActive("/invoices") ? "active" : ""}>
+          <li
+            onClick={() => navigate("/invoices")}
+            className={isActive("/invoices") ? "active" : ""}
+          >
             <span className="vd-sidebar-icon">📄</span> Invoices
           </li>
-          <li onClick={() => navigate("/clients")} className={isActive("/clients") ? "active" : ""}>
+          <li
+            onClick={() => navigate("/clients")}
+            className={isActive("/clients") ? "active" : ""}
+          >
             <span className="vd-sidebar-icon">👥</span> Clients
           </li>
-          <li onClick={() => navigate("/items")} className={isActive("/items") ? "active" : ""}>
+          <li
+            onClick={() => navigate("/items")}
+            className={isActive("/items") ? "active" : ""}
+          >
             <span className="vd-sidebar-icon">📦</span> Items
           </li>
-          <li onClick={() => navigate("/valdicass-pro")} className={isActive("/valdicass-pro") ? "active" : ""}>
+          <li
+            onClick={() => navigate("/valdicass-pro")}
+            className={isActive("/valdicass-pro") ? "active" : ""}
+          >
             <span className="vd-sidebar-icon">⭐</span> VC Pro
           </li>
-          <li onClick={() => navigate("/project-google-reviews")} className={isActive("/project-google-reviews") ? "active" : ""}>
+          <li
+            onClick={() => navigate("/project-google-reviews")}
+            className={isActive("/project-google-reviews") ? "active" : ""}
+          >
             <span className="vd-sidebar-icon">⭐</span> Collect Google Reviews
           </li>
-          <li onClick={() => navigate("/payments")} className={isActive("/payments") ? "active" : ""}>
+          <li
+            onClick={() => navigate("/payments")}
+            className={isActive("/payments") ? "active" : ""}
+          >
             <span className="vd-sidebar-icon">💳</span> Payments
           </li>
-          <li onClick={() => navigate("/reports")} className={isActive("/reports") ? "active" : ""}>
+          <li
+            onClick={() => navigate("/reports")}
+            className={isActive("/reports") ? "active" : ""}
+          >
             <span className="vd-sidebar-icon">📈</span> Reports
           </li>
-          <li onClick={() => navigate("/settings")} className={isActive("/settings") ? "active" : ""}>
+          <li
+            onClick={() => navigate("/settings")}
+            className={isActive("/settings") ? "active" : ""}
+          >
             <span className="vd-sidebar-icon">⚙️</span> Settings
+          </li>
+          {/* NEW: Trash in sidebar */}
+          <li
+            onClick={() => navigate("/trash")}
+            className={isActive("/trash") ? "active" : ""}
+          >
+            <span className="vd-sidebar-icon">🗑️</span> Trash
           </li>
         </ul>
       </div>
-      <Link to="/trash" className={location.pathname === '/trash' ? 'active' : ''}>
-  <span className="nav-icon">🗑️</span>
-  <span>Trash</span>
-</Link>
+
       {/* MAIN CONTENT */}
       <div className="vd-main">
         {children}
@@ -103,3 +136,4 @@ const AppLayout = ({ children, pageTitle = "Dashboard" }) => {
 };
 
 export default AppLayout;
+
