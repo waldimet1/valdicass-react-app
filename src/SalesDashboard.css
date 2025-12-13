@@ -304,6 +304,18 @@
   margin-bottom: 16px;
   transition: box-shadow 0.2s;
 }
+.vd-logout-btn {
+  margin-left: 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(0,0,0,0.15);
+  background: white;
+  cursor: pointer;
+  font-weight: 600;
+}
+.vd-logout-btn:hover {
+  opacity: 0.9;
+}
 
 .vd-estimate-card:hover {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);

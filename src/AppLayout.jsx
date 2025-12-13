@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { auth } from './firebaseConfig';
-import './SalesDashboard.css';
+import React, { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { signOut } from "firebase/auth";
+import { auth } from "./firebaseConfig";
+import "./SalesDashboard.css";
 
 const AppLayout = ({ children, pageTitle = "Dashboard" }) => {
   const [user, setUser] = useState(null);
@@ -9,14 +10,35 @@ const AppLayout = ({ children, pageTitle = "Dashboard" }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const ADMIN_UID = "REuTGQ98bAM0riY9xidS8fW6obl2";
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      navigate("/login"); // change to "/" if your login route is "/"
+    } catch (err) {
+      console.error("Logout failed:", err);
+    }
+  };
 
-  // Monitor auth state
+  // Monitor auth state + pull custom claims
   useEffect(() => {
-    const unsubAuth = auth.onAuthStateChanged((currentUser) => {
+    const unsubAuth = auth.onAuthStateChanged(async (currentUser) => {
       setUser(currentUser);
-      setIsAdmin(currentUser?.uid === ADMIN_UID);
+
+      if (!currentUser) {
+        setIsAdmin(false);
+        return;
+      }
+
+      try {
+        // Force refresh so we get the latest claims after /api/setAdmin
+        const tokenResult = await currentUser.getIdTokenResult(true);
+        setIsAdmin(!!tokenResult.claims.admin);
+      } catch (error) {
+        console.error("Error getting ID token result:", error);
+        setIsAdmin(false);
+      }
     });
+
     return () => unsubAuth();
   }, []);
 
@@ -28,7 +50,11 @@ const AppLayout = ({ children, pageTitle = "Dashboard" }) => {
       {/* HEADER */}
       <div className="vd-header">
         <div className="vd-logo">
-          <img src="/valdicass-logo.png" alt="Valdicass" style={{ height: 40 }} />
+          <img
+            src="/valdicass-logo.png"
+            alt="Valdicass"
+            style={{ height: 40 }}
+          />
         </div>
 
         <div className="vd-main-content">
@@ -37,7 +63,12 @@ const AppLayout = ({ children, pageTitle = "Dashboard" }) => {
 
         <div className="vd-header-right">
           {/* Notification Bell */}
-          <div className="vd-notification-bell" onClick={() => navigate("/activity")}>
+          <div
+            className="vd-notification-bell"
+            onClick={() => navigate("/activity")}
+            role="button"
+            title="Activity"
+          >
             🔔
           </div>
 
@@ -48,9 +79,20 @@ const AppLayout = ({ children, pageTitle = "Dashboard" }) => {
             </div>
             <div className="vd-user-info">
               <div className="vd-user-name">{currentUserName}</div>
-              <div className="vd-user-role">{isAdmin ? "Admin" : "Salesperson"}</div>
+              <div className="vd-user-role">
+                {isAdmin ? "Admin" : "Salesperson"}
+              </div>
             </div>
           </div>
+
+          {/* ✅ Logout Button */}
+          <button
+            onClick={handleLogout}
+            className="vd-logout-btn"
+            type="button"
+          >
+            Log out
+          </button>
         </div>
       </div>
 
@@ -63,61 +105,70 @@ const AppLayout = ({ children, pageTitle = "Dashboard" }) => {
           >
             <span className="vd-sidebar-icon">📊</span> Estimates
           </li>
+
           <li
             onClick={() => navigate("/schedule")}
             className={isActive("/schedule") ? "active" : ""}
           >
             <span className="vd-sidebar-icon">📅</span> Schedule
           </li>
+
           <li
             onClick={() => navigate("/invoices")}
             className={isActive("/invoices") ? "active" : ""}
           >
             <span className="vd-sidebar-icon">📄</span> Invoices
           </li>
+
           <li
             onClick={() => navigate("/clients")}
             className={isActive("/clients") ? "active" : ""}
           >
             <span className="vd-sidebar-icon">👥</span> Clients
           </li>
+
           <li
             onClick={() => navigate("/items")}
             className={isActive("/items") ? "active" : ""}
           >
             <span className="vd-sidebar-icon">📦</span> Items
           </li>
+
           <li
             onClick={() => navigate("/valdicass-pro")}
             className={isActive("/valdicass-pro") ? "active" : ""}
           >
             <span className="vd-sidebar-icon">⭐</span> VC Pro
           </li>
+
           <li
             onClick={() => navigate("/project-google-reviews")}
             className={isActive("/project-google-reviews") ? "active" : ""}
           >
             <span className="vd-sidebar-icon">⭐</span> Collect Google Reviews
           </li>
+
           <li
             onClick={() => navigate("/payments")}
             className={isActive("/payments") ? "active" : ""}
           >
             <span className="vd-sidebar-icon">💳</span> Payments
           </li>
+
           <li
             onClick={() => navigate("/reports")}
             className={isActive("/reports") ? "active" : ""}
           >
             <span className="vd-sidebar-icon">📈</span> Reports
           </li>
+
           <li
             onClick={() => navigate("/settings")}
             className={isActive("/settings") ? "active" : ""}
           >
             <span className="vd-sidebar-icon">⚙️</span> Settings
           </li>
-          {/* NEW: Trash in sidebar */}
+
           <li
             onClick={() => navigate("/trash")}
             className={isActive("/trash") ? "active" : ""}
@@ -128,12 +179,9 @@ const AppLayout = ({ children, pageTitle = "Dashboard" }) => {
       </div>
 
       {/* MAIN CONTENT */}
-      <div className="vd-main">
-        {children}
-      </div>
+      <div className="vd-main">{children}</div>
     </div>
   );
 };
 
 export default AppLayout;
-
