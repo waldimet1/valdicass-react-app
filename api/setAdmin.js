@@ -1,5 +1,5 @@
-// api/setAdmin.js
-const admin = require("firebase-admin");
+// api/setAdmin.js  (ESM)
+import admin from "firebase-admin";
 
 function requireEnv(name) {
   const v = process.env[name];
@@ -8,7 +8,7 @@ function requireEnv(name) {
 }
 
 function initAdmin() {
-  if (admin.apps.length) return;
+  if (admin.apps?.length) return;
 
   const projectId = requireEnv("FIREBASE_PROJECT_ID");
   const clientEmail = requireEnv("FIREBASE_CLIENT_EMAIL");
@@ -23,30 +23,26 @@ function initAdmin() {
   });
 }
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   try {
     // CORS
     res.setHeader("Access-Control-Allow-Credentials", true);
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader(
-      "Access-Control-Allow-Methods",
-      "GET,OPTIONS,PATCH,DELETE,POST,PUT"
-    );
+    res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS,POST");
     res.setHeader(
       "Access-Control-Allow-Headers",
-      "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, x-admin-secret"
+      "Content-Type, x-admin-secret"
     );
 
     if (req.method === "OPTIONS") return res.status(200).end();
 
-    // ✅ Init admin inside try/catch so Vercel shows the REAL error
+    // init inside try/catch
     initAdmin();
 
     if (req.method !== "POST") {
       return res.status(405).json({ error: "Method not allowed" });
     }
 
-    // 🔐 Secret check
     const secret = req.headers["x-admin-secret"];
     if (!secret || secret !== process.env.ADMIN_API_SECRET) {
       return res.status(401).json({ error: "Unauthorized" });
@@ -56,15 +52,13 @@ module.exports = async (req, res) => {
     if (!email && !uid) {
       return res
         .status(400)
-        .json({ error: "You must provide either 'email' or 'uid'." });
+        .json({ error: "Provide 'email' or 'uid'." });
     }
 
-    // Find user by email or uid
     const userRecord = email
       ? await admin.auth().getUserByEmail(email)
       : await admin.auth().getUser(uid);
 
-    // Merge existing claims so we don't erase other flags
     const existingClaims = userRecord.customClaims || {};
     const newClaims = { ...existingClaims, admin: !!makeAdmin };
 
@@ -77,12 +71,12 @@ module.exports = async (req, res) => {
       claims: newClaims,
     });
   } catch (err) {
-    console.error("❌ /api/setAdmin crashed:", err);
+    console.error("❌ /api/setAdmin error:", err);
     return res.status(500).json({
       error: "Function failed",
       message: err.message,
       hint:
-        "Check Vercel env vars: FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY, ADMIN_API_SECRET",
+        "Check env vars: FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY, ADMIN_API_SECRET",
     });
   }
-};
+}
