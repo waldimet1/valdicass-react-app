@@ -53,21 +53,20 @@ const SalesDashboard = () => {
     setLoading(true);
     setError(null);
 
-    try {
+        try {
+      const baseRef = collection(db, "quotes");
+
+      // Admin: see ALL quotes
       const q = isAdmin
-  ? query(
-      collection(db, "quotes"),
-      where("status", "!=", "deleted"),
-      orderBy("status"),
-      orderBy("createdAt", "desc")
-    )
-  : query(
-      collection(db, "quotes"),
-      where("createdBy", "==", user.uid),
-      where("status", "!=", "deleted"),
-      orderBy("status"),
-      orderBy("createdAt", "desc")
-    );
+        ? query(
+            baseRef,
+            orderBy("createdAt", "desc")
+          )
+        : query(
+            baseRef,
+            where("createdBy", "==", user.uid),
+            orderBy("createdAt", "desc")
+          );
 
       const unsub = onSnapshot(
         q,
@@ -94,6 +93,7 @@ const SalesDashboard = () => {
         },
         (err) => {
           console.error("❌ Firestore Error:", err);
+
           if (err.code === "failed-precondition") {
             setError("Database index needed. Check console for Firestore link.");
           } else if (err.code === "permission-denied") {
